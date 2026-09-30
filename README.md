@@ -59,24 +59,24 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Searches the listings dataset for items matching a text description, with optional size and max-price filters, and returns the best matches ranked by keyword overlap.
+- **Inputs:** `description` (str) — keywords describing what the user wants, e.g. `"vintage graphic tee"`. `size` (str | None, default `None`) — a size to filter by; `None` skips size filtering. Match rule: normalize both the requested size and each listing's size (lowercase, strip whitespace), then match if they're equal OR both appear together in a small fixed alias table (e.g. `"m"` aliases to `"s/m"` and `"m/l"`) — no substring matching, so `"l"` never matches `"xl"`. `max_price` (float | None, default `None`) — maximum price, inclusive; `None` skips price filtering.
+- **Returns:** A `list[dict]` of matching listings, best match first. Each dict has `id, title, description, category, style_tags (list[str]), size, condition, price (float), colors (list[str]), brand (str or None), platform`.
+- **When it has nothing:** An empty list — not `None`, and not an exception.
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Given a candidate item and the user's wardrobe, asks the model for one or two outfits that pair the new item with pieces the user already owns.
+- **Inputs:** `new_item` (dict) — a listing dict (same shape as `search_listings` returns) for the item under consideration. `wardrobe` (dict) — a dict with key `'items'` holding a `list[dict]` of the user's existing pieces; `'items'` may be an empty list.
+- **Returns:** A non-empty `str` containing outfit suggestions.
+- **When it has nothing:** When `wardrobe['items']` is empty, returns a non-empty string of general styling advice for the item instead — never raises, never returns `""`.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Writes a short, shareable caption (2–4 sentences) about the item and the suggested outfit, in the voice of a real post rather than a product listing.
+- **Inputs:** `outfit` (str) — the suggestion string returned by `suggest_outfit()`. `new_item` (dict) — the listing dict for the item.
+- **Returns:** A 2–4 sentence `str` caption that mentions the item, its price, and its platform exactly once each, and varies across repeated calls on the same input (see `config.TEMPERATURE` / `CACHE_ENABLED`).
+- **When it has nothing:** If `outfit` is empty or whitespace-only, returns a descriptive fallback message string instead of raising.
 
 ---
 
@@ -93,13 +93,13 @@
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:**
+**Branch rule:** If `search_listings` returns an empty list, put a message in `session["error"]` describing what the user could change (loosen the price, size, or description) and return the session immediately — do not call `suggest_outfit`. Otherwise, take `search_results[0]` as `selected_item` and continue to `suggest_outfit`, then `create_fit_card`.
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
+**How the query is parsed:** Regex. Pull `max_price` from a pattern like `under \$?(\d+(\.\d+)?)`, pull `size` from a pattern like `size\s+(\S+)`, and treat whatever text remains after removing those matched substrings as `description`.
 
-**What moves through the session:** <!-- which fields, in what order -->
+**What moves through the session:** `query` → `parsed` → `search_results` → `selected_item` → (`wardrobe`, set at session creation) → `outfit_suggestion` → `fit_card`, with `error` short-circuiting everything after it the moment it's set.
 
 ---
 
