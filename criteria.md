@@ -22,12 +22,19 @@ data earns credit; *"80% seemed reasonable"* does not.
 ## 1. A matching query completes all three tools
 
 Given a query that matches at least one listing, the agent completes all three
-tool calls and returns a fit card — in at least 4 of 5 tries.
+tool calls and returns a fit card — in at least 4 of 5 tries. Per
+`run_eval.py`, this is one fixed query run 5 times with caching off, not 5
+different queries.
 
-**Why this target:**
-<!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
-     "my search is a plain keyword match and some phrasings will miss" is a
-     real answer. -->
+**Why this target:** `search_listings` is deterministic — the same query
+returns the same result every time, so across 5 identical tries it either
+finds a match on all 5 or none; it can't produce a partial split by itself.
+The real source of variance is downstream: `suggest_outfit` and
+`create_fit_card` call the model with caching off, and `agent.py` doesn't yet
+catch `ModelUnavailable` (still a Unit 4 TODO) — a transient API failure on
+any one of the 5 tries would crash the run instead of completing. 4/5
+acknowledges that risk; 5/5 would mean claiming the model call never fails
+once across 5 tries, which isn't guaranteed.
 
 ---
 
@@ -36,65 +43,70 @@ tool calls and returns a fit card — in at least 4 of 5 tries.
 Given a query that matches no listings, the agent stops before calling
 `suggest_outfit` and returns a message naming what to change — 5 of 5 tries.
 
-**Why this target:**
-<!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
-     about this path? -->
+**Why this target:** `search_listings` guarantees an empty list — never
+`None`, never an exception — when nothing matches (see Tool Inventory). The
+branch in `run_agent` only has to check one fixed, guaranteed shape: is this
+list empty. That's not a judgment call or a fuzzy outcome — it's a direct
+check against a contract the tool itself enforces, so there's no scenario
+where the branch should ever get it wrong.
 
 ---
 
-## 3. Something about state
+## 3. The selected item never changes identity mid-pipeline
 
-<!-- YOU WRITE THIS ONE.
+Given any run that reaches `suggest_outfit`, the `id` of `session["selected_item"]`
+matches the `id` of the dict actually received as `suggest_outfit`'s `new_item`
+argument, and that same `id` matches what `create_fit_card` receives as its
+`new_item` argument too — verified against `trace.step()` logs — in 5 of 5
+tries.
 
-     How would you know that the item your search found is the same item the
-     next tool received? Name something countable or observable.
-
-     This is the criterion people find hardest, because state failure doesn't
-     look like state failure — it looks like a tool problem. Something that
-     compares session["selected_item"] against what actually reached
-     suggest_outfit is the shape you're after. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** This isn't a search-quality question or a model-output
+question — it's "did `agent.py` pass the same dict through two more function
+calls without it getting swapped or dropped." That's plain data-passing code
+with no external dependency, so there's no scenario where it should be allowed
+to miss. A failure here would be a wiring bug in `run_agent`, not a known
+limitation of any tool, the same reasoning that makes criterion 2 a 5/5.
 
 ---
 
-## 4. Something about the fit card
+## 4. The fit card always names the real price and platform
 
-<!-- YOU WRITE THIS ONE.
+Given 5 fit cards generated for 5 different items, each card contains the
+item's price as a literal `$` dollar figure and its platform name, each
+exactly once as a substring — in at least 4 of 5 tries.
 
-     The fit card calls a model, so the same input can produce different words
-     each time. That's not a bug — it's the nature of the tool. So what would
-     make it acceptable?
-
-     Think about what you'd actually be unhappy to see. A caption that never
-     mentions the price? Two different items producing the same opening
-     sentence? A card longer than a caption anyone would post? Any of those can
-     be turned into a number. -->
-
-
-
-**Why this target:**
-
-
+**Why this target:** `create_fit_card` calls a model, so the wording will
+differ every time by design (see `config.TEMPERATURE`) — that's not what this
+criterion checks. It checks two specific facts the prompt is supposed to force
+into the output every time: the price and the platform, both pulled straight
+from `new_item`, not invented by the model. Whether those facts show up is a
+test of whether the prompt reliably constrains the model's formatting, and
+models don't follow formatting instructions with perfect consistency — so 4/5
+leaves room for an occasional drop without treating a single miss as proof the
+tool is broken, the same shape of reasoning as criterion 1. Every listing in
+`data/listings.json` has a non-null `price` and `platform` (checked all 40),
+so the model always has both facts available going in — a miss here is never
+a missing-data edge case, it's unambiguously the model dropping or
+reformatting a fact it was given.
 
 ---
 
-## 5. Your choice
+## 5. The empty-wardrobe path never falls back to nothing
 
-<!-- YOU WRITE THIS ONE TOO.
+Given a query run through the full agent loop with an empty wardrobe
+(`wardrobe['items'] == []`), `suggest_outfit` returns a non-empty string of
+general styling advice — never `""`, never a crash — in 5 of 5 tries. Per
+`run_eval.py`, this is one fixed query run 5 times, not 5 different items.
 
-     Pick something you actually care about getting right. Speed, the empty
-     wardrobe path, what happens when the model can't be reached, whether the
-     search respects a price ceiling — anything, as long as it names a number
-     or an observable outcome. -->
-
-
-
-**Why this target:**
+**Why this target:** Recognizing an empty wardrobe is a deterministic branch
+inside `suggest_outfit`, the same shape as criterion 2's check, so across 5
+identical tries it takes the general-advice path every time — that part can't
+vary. The only thing that could vary between tries is the model call itself:
+an unhandled model-call failure (`ModelUnavailable`, which `agent.py` doesn't
+catch yet) would crash one try while the others complete normally. I picked
+this over the price-ceiling or speed options because the empty-wardrobe path
+is otherwise untested by the other four criteria, and I'd rather find out now
+whether it actually holds than discover it during grading.
 
 
 
