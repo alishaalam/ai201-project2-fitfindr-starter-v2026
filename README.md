@@ -121,17 +121,28 @@ $ python app.py ask '...'
 
 ```
 $ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
-
+[{'id': 'lst_002', 'title': 'Y2K Baby Tee — Butterfly Print', 'price': 18.0, 'size': 'S/M', ...},
+ {'id': 'lst_006', 'title': 'Graphic Tee — 2003 Tour Bootleg Style', 'price': 24.0, 'size': 'L', ...},
+ {'id': 'lst_017', 'title': 'Mesh Long-Sleeve Top — Black', 'price': 15.0, 'size': 'S/M', ...},
+ {'id': 'lst_033', 'title': 'Vintage Band Tee — Faded Grey', 'price': 19.0, 'size': 'L', ...},
+ {'id': 'lst_011', 'title': 'Low-Rise Cargo Pants — Khaki', 'price': 27.0, 'size': 'W29', ...},
+ {'id': 'lst_015', 'title': 'Vintage Graphic Hoodie — Faded Black', 'price': 26.0, 'size': 'L', ...}]
 ```
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
-
+$ python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
+Grab those vintage Levi's—they'll fill the straight-leg gap your dark wash baggy jeans leave open!
+For an effortless streetwear look, pair the jeans with your fitted white ribbed tank top, layered
+under the slightly cropped vintage black denim jacket, and finish with chunky white sneakers.
+Alternatively, tuck the white ribbed tank top into the jeans, cinch them with your brown leather
+belt, and throw on the oversized grey crewneck sweatshirt for a cozy, classic vibe.
 ```
 
 ```
-$ python -c "from tools import create_fit_card; ..."
-
+$ python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+Still pinching myself over scoring these vintage Levi's 501 jeans on depop for just $38! They're
+the absolute best medium wash and fit like an absolute dream. Can't wait to throw them on with
+some fresh white sneakers for the ultimate effortless look.
 ```
 
 ---
