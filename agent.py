@@ -170,20 +170,33 @@ def _parse_query(query: str) -> dict:
 
 
 def _empty_message(parsed: dict) -> str:
-    """Name the filters that were applied and what to loosen."""
-    tried = [f'"{parsed["description"]}"']
-    tips = []
-    if parsed["max_price"] is not None:
-        tried.append(f'under ${parsed["max_price"]:g}')
-        tips.append("raise your max price")
-    if parsed["size"]:
-        tried.append(f'size {parsed["size"]}')
-        tips.append("drop the size or try a neighbouring one (e.g. M also matches S/M and M/L)")
-    tips.append("use fewer or more general keywords (e.g. 'tee' instead of a brand or colour)")
-    return (
-        f"Nothing in the listings matched {', '.join(tried)}. "
-        f"Try to {'; '.join(tips)}."
-    )
+    """
+    Say which filter blocked the search and what to change. Re-runs the search
+    with each filter dropped in turn, so the advice is specific.
+    """
+    desc, size, price = parsed["description"], parsed["size"], parsed["max_price"]
+    tried = [f'"{desc}"']
+    if price is not None:
+        tried.append(f"under ${price:g}")
+    if size:
+        tried.append(f"size {size}")
+    head = f"Nothing matched {', '.join(tried)}."
+
+    if price is not None:
+        hits = search_listings(desc, size=size, max_price=None)
+        if hits:
+            cheapest = min(h["price"] for h in hits)
+            return (f"{head} {len(hits)} match without the price cap — the cheapest "
+                    f"is ${cheapest:g}, so raise your max to at least that.")
+    if size:
+        hits = search_listings(desc, size=None, max_price=price)
+        if hits:
+            sizes = sorted({h["size"] for h in hits})
+            return (f"{head} {len(hits)} match in other sizes ({', '.join(sizes)}) — "
+                    f"try one of those, or leave the size out.")
+    return (f"{head} No listing contains those words, whatever the size or price. "
+            f"This catalog is tops, bottoms, outerwear, shoes and accessories — "
+            f"try a plain item word like 'jacket', 'jeans' or 'sneakers'.")
 
 
 # ── running it directly ───────────────────────────────────────────────────────

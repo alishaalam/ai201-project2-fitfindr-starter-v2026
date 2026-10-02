@@ -121,7 +121,7 @@ $ python app.py ask 'looking for a vintage graphic tee under $30'
   Fit card: I am absolutely losing my mind over this butterfly print Y2K baby tee I just scored on depop for only $18! It's giving total vintage fairycore vibes, but I'm definitely gonna balance out the fitted silhouette by styling it with my favorite baggy dark wash straight-leg jeans and chunky white sneakers. Such a good find!
 
 $ python agent.py   # empty-search path
-  stopped: Nothing in the listings matched "designer ballgown", under $5, size XXS. Try to raise your max price; drop the size or try a neighbouring one (e.g. M also matches S/M and M/L); use fewer or more general keywords (e.g. 'tee' instead of a brand or colour).
+  stopped: Nothing matched "designer ballgown", under $5, size XXS. No listing contains those words, whatever the size or price. This catalog is tops, bottoms, outerwear, shoes and accessories — try a plain item word like 'jacket', 'jeans' or 'sneakers'.
   fit_card is None — it should still be None here
 ```
 
@@ -174,7 +174,12 @@ some fresh white sneakers for the ultimate effortless look.
 
 - *What I asked for:* `run_agent()` in `agent.py`, following my branch rule: if `search_listings` returns an empty list, set `session["error"]` and return; otherwise continue to `suggest_outfit` and `create_fit_card`, passing every value through the session.
 - *What came back:* A `while` loop that inspects the session each pass and runs the next missing step, plus a regex `_parse_query` and an `_empty_message` helper. I ran both example paths. I also wrapped `suggest_outfit` to confirm the item it received was the same object as `session["selected_item"]` (`True`, `lst_002`).
-- *What I changed:* The loop itself I kept as written. I then asked Claude to read the empty-search message cold, as a user who knows nothing about the app. Its verdict: the message names three levers but doesn't say which one caused the miss; "neighbouring size" and the "M also matches S/M" example don't help for `XXS`; and "fewer or more general keywords" pulls in two directions. I recorded that as a known weakness (see Open Questions below) instead of rewriting the message, because the assignment says to work out the fix myself and the honest finding is that the message is not finished.
+- *What I changed:* I kept the loop as written, but rewrote `_empty_message` in `agent.py` because of the cold read. Claude's verdict on the first message: it named three levers (price, size, keywords) without saying which one caused the miss; "neighbouring size" and the "M also matches S/M" example were no help for `XXS`; and "fewer or more general keywords" pulled in two directions. The new version re-runs `search_listings` with each filter dropped in turn and says which one blocked the search:
+  - **Price blocked it:** "10 match without the price cap — the cheapest is $15, so raise your max to at least that."
+  - **Size blocked it:** "6 match in other sizes (L, S/M, W29) — try one of those, or leave the size out."
+  - **The words blocked it:** "No listing contains those words, whatever the size or price. This catalog is tops, bottoms, outerwear, shoes and accessories — try a plain item word like 'jacket', 'jeans' or 'sneakers'."
+  I checked all three branches by running them, and the happy path still reaches the fit card. The trade-off is up to two extra local searches on an empty result, which is cheap because search is not a model call.
+- *What's still imperfect:* the size list for `graphic tee size XXS` includes `W29`, a waist size, because the search ranks on keyword overlap and a bottoms listing shares a word with the query. The suggestion is accurate to what the tool returned but is not a size a tee buyer would want.
 
 **Everything else AI did in this project**
 
@@ -188,8 +193,8 @@ some fresh white sneakers for the ultimate effortless look.
 
 **Open Questions (empty-search message)**
 
-- The message lists every applied filter but not which one blocked the search. Fixing that means re-searching with each filter dropped in turn, which adds tool calls.
-- It doesn't say what the catalog contains, so a user who typed "ballgown" can't know to try "dress".
+- I have not re-run the cold read on the new message with a fresh reader. Whether a real user now knows what to try next is still untested.
+- The size suggestions can include sizes that don't fit the item type (the `W29` case above).
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
