@@ -95,7 +95,7 @@ def search_listings(
             continue
         candidates.append(item)
 
-    query_tokens = set(_tokenize(description))
+    query_tokens = set(_tokenize(description or ""))
     if not query_tokens:
         return []
 

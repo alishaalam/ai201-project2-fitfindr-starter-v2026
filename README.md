@@ -62,7 +62,7 @@ FitFindr is a secondhand-clothes shopping agent. A user types a plain-language r
 - **What it does:** Searches the listings dataset for items matching a text description, with optional size and max-price filters, and returns the best matches ranked by keyword overlap.
 - **Inputs:** `description` (str) — keywords describing what the user wants, e.g. `"vintage graphic tee"`. `size` (str | None, default `None`) — a size to filter by; `None` skips size filtering. Match rule: normalize both the requested size and each listing's size (lowercase, strip whitespace, drop any parenthetical like `"(fits oversized)"`), then match if they're equal OR both appear together in a small fixed alias table (e.g. `"m"` aliases to `"s/m"` and `"m/l"`, `"oversized"`/`"baggy"` alias to `"xl"`, `"petite"`/`"tiny"` alias to `"s"`) — no substring matching, so `"l"` never matches `"xl"`. Shoe sizes (`US 7`–`US 9`) and waist sizes (`W27`–`W32`, `W30 L30`) match only on exact equality after normalization, with no aliasing to the letter scale. A size term with no entry in the alias table (e.g. a relative description like `"big feet"`) is not parsed into `size` at all — it stays in `description`, where it only affects keyword-overlap ranking, not filtering. `max_price` (float | None, default `None`) — maximum price, inclusive; `None` skips price filtering.
 - **Returns:** A `list[dict]` of matching listings, best match first. Each dict has `id, title, description, category, style_tags (list[str]), size, condition, price (float), colors (list[str]), brand (str or None), platform`.
-- **When it has nothing:** An empty list — not `None`, and not an exception.
+- **When it has nothing:** An empty list — not `None`, and not an exception. That includes a `description` with no word characters (`""`, whitespace, `"!!!"`) and `description=None`: no keywords means nothing to rank on, so the result is `[]` regardless of size or price.
 
 ### `suggest_outfit`
 
@@ -178,7 +178,8 @@ some fresh white sneakers for the ultimate effortless look.
   - **Price blocked it:** "10 match without the price cap — the cheapest is $15, so raise your max to at least that."
   - **Size blocked it:** "6 match in other sizes (L, S/M, W29) — try one of those, or leave the size out."
   - **The words blocked it:** "No listing contains those words, whatever the size or price. This catalog is tops, bottoms, outerwear, shoes and accessories — try a plain item word like 'jacket', 'jeans' or 'sneakers', and drop the size and price on that retry so they don't block it too."
-  I checked all three branches by running them, and the happy path still reaches the fit card. The trade-off is up to two extra local searches on an empty result, which is cheap because search is not a model call.
+  - **No item word at all** (`""`, `"!!!"`, or only filters like `"size M under $50"`): "I didn't get an item to search for — name what you're after, then add any size or price. Try: 'denim jacket size M under $50', 'black sneakers size M under $50' or 'vintage graphic tee size M under $50'." The examples reuse the user's own size and price so they can copy one as-is.
+  I checked all four branches by running them, and the happy path still reaches the fit card. The trade-off is up to two extra local searches on an empty result, which is cheap because search is not a model call.
 - *What's still imperfect:* the size list for `graphic tee size XXS` includes `W29`, a waist size, because the search ranks on keyword overlap and a bottoms listing shares a word with the query. The suggestion is accurate to what the tool returned but is not a size a tee buyer would want.
 
 **Everything else AI did in this project**
@@ -195,6 +196,10 @@ some fresh white sneakers for the ultimate effortless look.
 
 - **Cold read result (fresh Claude chat, "designer ballgown size XXS under $5" message):** the reader would search "jacket", "jeans" or "sneakers", so it had a concrete next step and was not stuck. It said it would probably carry "under $5" and "XXS" over to the retry, because "whatever the size or price" never says to drop them, and a retry with those filters could come back empty again. It also noted that dresses aren't in the listed categories, so it would waste a search on "dress". Only the words-blocked variant was tested, and a model reading closely is a more charitable reader than a real user skimming on a phone.
 - **Fixed after the cold read:** the words-blocked message now also says to drop the size and price when retrying with a new word. I have not re-run the cold read on this final wording.
+- **Empty-description case (added after Moment 2):** a description with no word characters used to fall through to the "words blocked" message, which printed `Nothing matched ""` and claimed no listing contains those words. That is false: no keyword was searched. `_empty_message` now checks for it first and returns the "no item word" message above. `search_listings(None)` also returns `[]` instead of raising `AttributeError`. I ran `""`, `"!!!"`, `"?? under $30"`, `"size M under $50"` and a nonsense query through it. I added a diagnostic scenario for it in `scenarios.py` (`"size M under $50"`, not tied to one of the five criteria).
+  - *Trade-off:* the message does not say the filters were kept, because each query is parsed fresh and there is no session across turns. The user retypes them; the examples carry them to make that cheap.
+  - *Checked:* the nine example queries (three items, each bare / with `size M under $50` / with `under $30`) all return results. `black sneakers size M under $50` returns only 1, so that example is thin.
+  - *Not tested:* the new message with the cold-read method or a human reader.
 - Still untested: the price-blocked and size-blocked variants, and a human reader.
 - The size suggestions can include sizes that don't fit the item type (the `W29` case above).
 

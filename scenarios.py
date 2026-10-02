@@ -35,6 +35,14 @@ SCENARIOS = [
         "wardrobe": "empty",
         "criterion": None,
     },
+    {
+        # Filters but no item word. Hits the "no item to search for" message,
+        # not the "nothing matched" one. Diagnostic.
+        "name": "filters only, no item word",
+        "query": "size M under $50",
+        "wardrobe": "example",
+        "criterion": None,
+    },
     # TODO: add what your criteria 3, 4 and 5 need.
     #
     # Set "criterion" to the number in criteria.md that the scenario tests.

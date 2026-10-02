@@ -175,6 +175,21 @@ def _empty_message(parsed: dict) -> str:
     with each filter dropped in turn, so the advice is specific.
     """
     desc, size, price = parsed["description"], parsed["size"], parsed["max_price"]
+
+    # No word characters means no keywords were searched at all — say that,
+    # rather than claiming nothing matched.
+    if not re.search(r"\w", desc or ""):
+        # Reuse the user's own filters in the examples so they can copy one as-is.
+        filters = ([f"size {size}"] if size else []) + (
+            [f"under ${price:g}"] if price is not None else []
+        )
+        suffix = f" {' '.join(filters)}" if filters else ""
+        return (
+            "I didn't get an item to search for — name what you're after, then add "
+            f"any size or price. Try: 'denim jacket{suffix}', "
+            f"'black sneakers{suffix}' or 'vintage graphic tee{suffix}'."
+        )
+
     tried = [f'"{desc}"']
     if price is not None:
         tried.append(f"under ${price:g}")
