@@ -193,7 +193,9 @@ some fresh white sneakers for the ultimate effortless look.
 
 **Open Questions (empty-search message)**
 
-- I have not re-run the cold read on the new message with a fresh reader. Whether a real user now knows what to try next is still untested.
+- **Cold read result (fresh Claude chat, "designer ballgown size XXS under $5" message):** the reader would search "jacket", "jeans" or "sneakers", so it had a concrete next step and was not stuck. It said it would probably carry "under $5" and "XXS" over to the retry, because "whatever the size or price" never says to drop them, and a retry with those filters could come back empty again. It also noted that dresses aren't in the listed categories, so it would waste a search on "dress". Only the words-blocked variant was tested, and a model reading closely is a more charitable reader than a real user skimming on a phone.
+- **Not yet fixed:** the message should say to drop the size and price when retrying with a new word. I haven't made that change.
+- Still untested: the price-blocked and size-blocked variants, and a human reader.
 - The size suggestions can include sizes that don't fit the item type (the `W29` case above).
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
