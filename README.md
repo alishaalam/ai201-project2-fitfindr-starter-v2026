@@ -41,7 +41,7 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
-
+FitFindr is a secondhand-clothes shopping agent. A user types a plain-language request such as "vintage graphic tee under $30" (optionally with a size), and the agent searches a listings dataset, picks the best match, suggests outfits that pair it with pieces from the user's wardrobe, and writes a short shareable "fit card" caption. If nothing matches, it stops before the outfit step and tells the user which filters to loosen.
 
 ---
 
@@ -97,7 +97,7 @@
 
 **Where it lives:** `agent.py::run_agent`
 
-**How the query is parsed:** Regex. Pull `max_price` from a pattern like `under \$?(\d+(\.\d+)?)`, pull `size` from a pattern like `size\s+(\S+)`, and treat whatever text remains after removing those matched substrings as `description`.
+**How the query is parsed:** Regex, in `agent.py::_parse_query`. `max_price` comes from `under|below|less than|max $N`; `size` comes from `size <token>`; those matches are removed, filler words ("looking for", "a", "an", "I want", "find me") are stripped, and the remaining text is `description`.
 
 **What moves through the session:** `query` → `parsed` → `search_results` → `selected_item` → (`wardrobe`, set at session creation) → `outfit_suggestion` → `fit_card`, with `error` short-circuiting everything after it the moment it's set.
 
@@ -113,8 +113,16 @@
 **One full query**
 
 ```
-$ python app.py ask '...'
+$ python app.py ask 'looking for a vintage graphic tee under $30'
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
 
+  Outfit:   Pair the Y2K baby tee with your baggy straight-leg jeans, dark wash to balance the fitted top with streetwear proportions, and finish the look with chunky white sneakers. For a slightly edgy transitional outfit, layer your vintage black denim jacket over the tee, keep the same baggy straight-leg jeans, dark wash, and step into your black combat boots.
+
+  Fit card: I am absolutely losing my mind over this butterfly print Y2K baby tee I just scored on depop for only $18! It's giving total vintage fairycore vibes, but I'm definitely gonna balance out the fitted silhouette by styling it with my favorite baggy dark wash straight-leg jeans and chunky white sneakers. Such a good find!
+
+$ python agent.py   # empty-search path
+  stopped: Nothing in the listings matched "designer ballgown", under $5, size XXS. Try to raise your max price; drop the size or try a neighbouring one (e.g. M also matches S/M and M/L); use fewer or more general keywords (e.g. 'tee' instead of a brand or colour).
+  fit_card is None — it should still be None here
 ```
 
 **The three tools, tested one at a time**
@@ -156,17 +164,32 @@ some fresh white sneakers for the ultimate effortless look.
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
 
-**Moment 1**
+**Moment 1 — closing a gap in the `search_listings` spec (Milestone 2)**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* A review of my `search_listings` spec's size-matching rule before building anything on it. The first version only said "normalize and match via a small alias table", which left open what happens to sizes like `"M (fits oversized)"`, to words like "oversized" or "petite", to shoe and waist sizes, and to relative terms like "big feet".
+- *What came back:* Those four gaps, each with a proposed rule.
+- *What I changed:* I rewrote the Inputs line in this README (commit `84fca98`). Parentheticals are now dropped before matching. `oversized`/`baggy` alias to `xl` and `petite`/`tiny` alias to `s`. Shoe sizes (`US 7`–`US 9`) and waist sizes (`W27`–`W32`) match on exact equality only. A relative term like "big feet" is never parsed into `size`; it stays in `description` and only affects ranking. I chose that last rule over a guessed numeric threshold because a wrong filter would silently hide listings, while a ranking tweak can't.
 
-**Moment 2**
+**Moment 2 — building the planning loop and stress-testing its empty-search message (Milestone 5)**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- *What I asked for:* `run_agent()` in `agent.py`, following my branch rule: if `search_listings` returns an empty list, set `session["error"]` and return; otherwise continue to `suggest_outfit` and `create_fit_card`, passing every value through the session.
+- *What came back:* A `while` loop that inspects the session each pass and runs the next missing step, plus a regex `_parse_query` and an `_empty_message` helper. I ran both example paths. I also wrapped `suggest_outfit` to confirm the item it received was the same object as `session["selected_item"]` (`True`, `lst_002`).
+- *What I changed:* The loop itself I kept as written. I then asked Claude to read the empty-search message cold, as a user who knows nothing about the app. Its verdict: the message names three levers but doesn't say which one caused the miss; "neighbouring size" and the "M also matches S/M" example don't help for `XXS`; and "fewer or more general keywords" pulls in two directions. I recorded that as a known weakness (see Open Questions below) instead of rewriting the message, because the assignment says to work out the fix myself and the honest finding is that the message is not finished.
+
+**Everything else AI did in this project**
+
+| Milestone | What Claude did | Result |
+|---|---|---|
+| 2 | Helped draft the three tool specs and the loop branch rule | `a37431a`, then the size gap fixed in `84fca98` |
+| 3 | Helped write the five acceptance criteria with targets and reasoning | `3b01e7c`, `criteria.md` |
+| 4 | Implemented `search_listings`, `suggest_outfit`, `create_fit_card` in `tools.py` | `6efacd8`; per-tool tests below |
+| 5 | Implemented `run_agent`, `_parse_query`, `_empty_message` | `58a1a94` |
+| 6 | Filled in this README from verified output (nothing pasted that wasn't run) | this commit |
+
+**Open Questions (empty-search message)**
+
+- The message lists every applied filter but not which one blocked the search. Fixing that means re-searching with each filter dropped in turn, which adds tool calls.
+- It doesn't say what the catalog contains, so a user who typed "ballgown" can't know to try "dress".
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
