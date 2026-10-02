@@ -196,7 +196,8 @@ def _empty_message(parsed: dict) -> str:
                     f"try one of those, or leave the size out.")
     return (f"{head} No listing contains those words, whatever the size or price. "
             f"This catalog is tops, bottoms, outerwear, shoes and accessories — "
-            f"try a plain item word like 'jacket', 'jeans' or 'sneakers'.")
+            f"try a plain item word like 'jacket', 'jeans' or 'sneakers', and drop "
+            f"the size and price on that retry so they don't block it too.")
 
 
 # ── running it directly ───────────────────────────────────────────────────────

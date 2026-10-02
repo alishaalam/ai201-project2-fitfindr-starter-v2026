@@ -121,7 +121,7 @@ $ python app.py ask 'looking for a vintage graphic tee under $30'
   Fit card: I am absolutely losing my mind over this butterfly print Y2K baby tee I just scored on depop for only $18! It's giving total vintage fairycore vibes, but I'm definitely gonna balance out the fitted silhouette by styling it with my favorite baggy dark wash straight-leg jeans and chunky white sneakers. Such a good find!
 
 $ python agent.py   # empty-search path
-  stopped: Nothing matched "designer ballgown", under $5, size XXS. No listing contains those words, whatever the size or price. This catalog is tops, bottoms, outerwear, shoes and accessories — try a plain item word like 'jacket', 'jeans' or 'sneakers'.
+  stopped: Nothing matched "designer ballgown", under $5, size XXS. No listing contains those words, whatever the size or price. This catalog is tops, bottoms, outerwear, shoes and accessories — try a plain item word like 'jacket', 'jeans' or 'sneakers', and drop the size and price on that retry so they don't block it too.
   fit_card is None — it should still be None here
 ```
 
@@ -177,7 +177,7 @@ some fresh white sneakers for the ultimate effortless look.
 - *What I changed:* I kept the loop as written, but rewrote `_empty_message` in `agent.py` because of the cold read. Claude's verdict on the first message: it named three levers (price, size, keywords) without saying which one caused the miss; "neighbouring size" and the "M also matches S/M" example were no help for `XXS`; and "fewer or more general keywords" pulled in two directions. The new version re-runs `search_listings` with each filter dropped in turn and says which one blocked the search:
   - **Price blocked it:** "10 match without the price cap — the cheapest is $15, so raise your max to at least that."
   - **Size blocked it:** "6 match in other sizes (L, S/M, W29) — try one of those, or leave the size out."
-  - **The words blocked it:** "No listing contains those words, whatever the size or price. This catalog is tops, bottoms, outerwear, shoes and accessories — try a plain item word like 'jacket', 'jeans' or 'sneakers'."
+  - **The words blocked it:** "No listing contains those words, whatever the size or price. This catalog is tops, bottoms, outerwear, shoes and accessories — try a plain item word like 'jacket', 'jeans' or 'sneakers', and drop the size and price on that retry so they don't block it too."
   I checked all three branches by running them, and the happy path still reaches the fit card. The trade-off is up to two extra local searches on an empty result, which is cheap because search is not a model call.
 - *What's still imperfect:* the size list for `graphic tee size XXS` includes `W29`, a waist size, because the search ranks on keyword overlap and a bottoms listing shares a word with the query. The suggestion is accurate to what the tool returned but is not a size a tee buyer would want.
 
@@ -194,7 +194,7 @@ some fresh white sneakers for the ultimate effortless look.
 **Open Questions (empty-search message)**
 
 - **Cold read result (fresh Claude chat, "designer ballgown size XXS under $5" message):** the reader would search "jacket", "jeans" or "sneakers", so it had a concrete next step and was not stuck. It said it would probably carry "under $5" and "XXS" over to the retry, because "whatever the size or price" never says to drop them, and a retry with those filters could come back empty again. It also noted that dresses aren't in the listed categories, so it would waste a search on "dress". Only the words-blocked variant was tested, and a model reading closely is a more charitable reader than a real user skimming on a phone.
-- **Not yet fixed:** the message should say to drop the size and price when retrying with a new word. I haven't made that change.
+- **Fixed after the cold read:** the words-blocked message now also says to drop the size and price when retrying with a new word. I have not re-run the cold read on this final wording.
 - Still untested: the price-blocked and size-blocked variants, and a human reader.
 - The size suggestions can include sizes that don't fit the item type (the `W29` case above).
 
