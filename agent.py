@@ -13,6 +13,8 @@ Build and test your three tools in `tools.py` first. Then come here.
     python agent.py          runs both example paths below
 """
 
+import re
+
 import config
 import trace
 from tools import search_listings, suggest_outfit, create_fit_card
@@ -106,10 +108,82 @@ def run_agent(query: str, wardrobe: dict) -> dict:
         than a stack trace. The import is already at the top of this file.
     """
     session = new_session(query, wardrobe)
+    session["parsed"] = _parse_query(query)
 
-    # TODO: delete these two lines and build the loop.
-    session["error"] = "The planning loop isn't built yet — see the TODO in agent.py."
-    return session
+    # Each pass looks at the session, picks the next step, runs it, and stores
+    # the result. The next pass reads that result back out of the session.
+    count = 0
+    while True:
+        count += 1
+        trace.check_iterations(count)
+
+        if not session["search_results"] and session["error"] is None and count == 1:
+            parsed = session["parsed"]
+            session["search_results"] = search_listings(
+                parsed["description"], size=parsed["size"], max_price=parsed["max_price"]
+            )
+            continue
+
+        # THE BRANCH: nothing came back, so stop before suggest_outfit.
+        if not session["search_results"]:
+            session["error"] = _empty_message(session["parsed"])
+            return session
+
+        if session["selected_item"] is None:
+            session["selected_item"] = session["search_results"][0]
+            continue
+
+        if session["outfit_suggestion"] is None:
+            session["outfit_suggestion"] = suggest_outfit(
+                session["selected_item"], session["wardrobe"]
+            )
+            continue
+
+        if session["fit_card"] is None:
+            session["fit_card"] = create_fit_card(
+                session["outfit_suggestion"], session["selected_item"]
+            )
+            continue
+
+        return session
+
+
+def _parse_query(query: str) -> dict:
+    """Regex parse: 'under $N' -> max_price, 'size X' -> size, the rest -> description."""
+    text = query
+    max_price = None
+    size = None
+
+    m = re.search(r"\b(?:under|below|less than|max)\s*\$?\s*(\d+(?:\.\d+)?)", text, re.I)
+    if m:
+        max_price = float(m.group(1))
+        text = text[:m.start()] + " " + text[m.end():]
+
+    m = re.search(r"\bsize\s+(\S+)", text, re.I)
+    if m:
+        size = m.group(1).strip(",.;")
+        text = text[:m.start()] + " " + text[m.end():]
+
+    text = re.sub(r"\b(looking for|i want|i need|find me|a|an)\b", " ", text, flags=re.I)
+    description = re.sub(r"[\s,]+", " ", text).strip(" ,.")
+    return {"description": description, "size": size, "max_price": max_price}
+
+
+def _empty_message(parsed: dict) -> str:
+    """Name the filters that were applied and what to loosen."""
+    tried = [f'"{parsed["description"]}"']
+    tips = []
+    if parsed["max_price"] is not None:
+        tried.append(f'under ${parsed["max_price"]:g}')
+        tips.append("raise your max price")
+    if parsed["size"]:
+        tried.append(f'size {parsed["size"]}')
+        tips.append("drop the size or try a neighbouring one (e.g. M also matches S/M and M/L)")
+    tips.append("use fewer or more general keywords (e.g. 'tee' instead of a brand or colour)")
+    return (
+        f"Nothing in the listings matched {', '.join(tried)}. "
+        f"Try to {'; '.join(tips)}."
+    )
 
 
 # ── running it directly ───────────────────────────────────────────────────────
