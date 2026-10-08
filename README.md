@@ -315,15 +315,27 @@ Trace:
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
-| 1 |  |  |  |  |
-| 2 |  |  |  |  |
-| 3 |  |  |  |  |
-| 4 |  |  |  |  |
-| 5 |  |  |  |  |
+| 1 | A matching query completes all three tools | 4 of 5 | MET (5/5) | No crash, no `session["error"]` and a non-empty `fit_card` on all five tries; the five fit cards were all different, so these were five real model answers. |
+| 2 | An impossible query stops before the second tool | 5 of 5 | MET (5/5) | `session["error"]` was set and there was no `suggest_outfit` or `create_fit_card` step in the trace on all five tries. |
+| 3 | The selected item never changes identity mid-pipeline | 5 of 5 | MET (5/5) | The same `id=lst_005` appeared at `select`, `suggest_outfit` and `create_fit_card` in all five traces. |
+| 4 | The empty-wardrobe path never falls back to nothing | 5 of 5 | MET (5/5) | Every try returned a non-empty `outfit_suggestion` with no crash, and the five answers were all different. |
+| 5 | A query with filters but no item word says no item was given | 5 of 5 | MET (5/5) | Every message started "I didn't get an item to search for", none said "Nothing matched", and there was no tool-2 step. |
 
 **Diagnoses**
 
+Nothing was missed, so there is no step or mechanism to name. I read each count against the original target: 5/5 against a 4-of-5 target for criterion 1, and 5/5 against 5-of-5 for the rest. I did not need a generous reading to get there.
 
+**Were the targets too low? Yes.** Every criterion passed on every try, 0 of 80 model calls failed, and a run that can't fail can't tell a solid agent from a lucky one. I'm tightening all five, with each tightened version written under the original in `criteria.md` (the originals are untouched). These are not measurability revisions: the originals could be scored, and they were met.
+
+- **Criterion 1 (4 of 5 → 5 of 5).** The slack was for a model failure with no handler. `ModelUnavailable` has been handled since Milestone 2 and no call failed.
+- **Criterion 2.** One impossible query only proves the branch for one kind of block. The tightened version uses three (words, price, size) and requires the message to name the blocking filter.
+- **Criterion 3.** The weakest check I had. The trace ids come from the same session variable that is passed on, so a swapped item could not have shown up. The tightened version compares the full dict the tools received.
+- **Criterion 4.** "Non-empty" lets a one-word or off-topic reply through. The tightened version requires at least 50 characters and a garment from the item's title.
+- **Criterion 5.** One filters-only query doesn't show the guard holds for each filter combination. The tightened version uses three.
+
+**What these five criteria don't cover:** search relevance. `black sneakers under $60` returns the Oversized Flannel Shirt first. Two sneaker listings are under $60 (lst_019, lst_035), but each matches one query word ("sneakers") and so does every black item ("black"). Every word counts the same and ties fall back to file order, so the flannel shirt wins. This is the tool's ranking (`search_listings`), not the loop or the model. No criterion would catch it, and it is the most likely real failure in the agent.
+
+**Caveat:** pass and fail were scored by a script I wrote, using the rules written under the Run Log — Before table. The tightened criteria have not been re-measured.
 
 ---
 

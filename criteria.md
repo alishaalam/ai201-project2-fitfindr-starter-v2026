@@ -36,6 +36,11 @@ any one of the 5 tries would crash the run instead of completing. 4/5
 acknowledges that risk; 5/5 would mean claiming the model call never fails
 once across 5 tries, which isn't guaranteed.
 
+
+> **Tightened in unit 4:** A matching query completes all three tools and returns a fit card in 5 of 5 tries (was 4 of 5).
+>
+> **Why tightened:** The 4 of 5 slack was written for a model failure that `agent.py` had no handler for. The handler exists since Milestone 2, and 0 of the 80 model calls in the run failed. This is not a measurability revision: the original could be scored and was met. A target that can't fail can't tell a solid agent from a lucky one.
+
 ---
 
 ## 2. An impossible query stops before the second tool
@@ -49,6 +54,11 @@ branch in `run_agent` only has to check one fixed, guaranteed shape: is this
 list empty. That's not a judgment call or a fuzzy outcome — it's a direct
 check against a contract the tool itself enforces, so there's no scenario
 where the branch should ever get it wrong.
+
+
+> **Tightened in unit 4:** Across three impossible queries (an item word nothing matches, a price nothing meets, a size nothing has), the agent stops before `suggest_outfit` in 5 of 5 tries each, and the message names the specific filter that blocked the search.
+>
+> **Why tightened:** One impossible query only shows the branch works for one kind of block. The original also didn't require the message to say which filter caused it. This is not a measurability revision: the original could be scored and was met. A target that can't fail can't tell a solid agent from a lucky one.
 
 ---
 
@@ -66,6 +76,11 @@ calls without it getting swapped or dropped." That's plain data-passing code
 with no external dependency, so there's no scenario where it should be allowed
 to miss. A failure here would be a wiring bug in `run_agent`, not a known
 limitation of any tool, the same reasoning that makes criterion 2 a 5/5.
+
+
+> **Tightened in unit 4:** For every run that reaches `suggest_outfit`, the full dict received by `suggest_outfit` and by `create_fit_card` equals `search_results[0]` field for field, captured from the tool calls rather than read from the session, in 5 of 5 tries.
+>
+> **Why tightened:** The trace ids come from the same session variable that is passed on, so the original check could not detect a swapped or altered item. It also compared only the `id`. This is not a measurability revision: the original could be scored and was met. A target that can't fail can't tell a solid agent from a lucky one.
 
 ---
 
@@ -88,6 +103,11 @@ whether it actually holds than discover it during grading.
 
 
 
+
+> **Tightened in unit 4:** With an empty wardrobe, `suggest_outfit` returns advice of at least 50 characters that names a garment from the item's title, never `""` and never a crash, in 5 of 5 tries.
+>
+> **Why tightened:** "Non-empty" lets a one-word or off-topic reply pass. This is not a measurability revision: the original could be scored and was met. A target that can't fail can't tell a solid agent from a lucky one.
+
 ---
 
 ## 5. A query with filters but no item word says no item was given
@@ -104,6 +124,11 @@ description before it looks at any filter. No model is involved, so nothing can
 vary between tries. It earns its own criterion because the message used to be
 wrong: it printed `Nothing matched ""` and said no listing contains those
 words, which was false since no keyword had been searched.
+
+
+> **Tightened in unit 4:** Across three filters-only queries (size only, price only, size and price), the agent stops before `suggest_outfit` with the "didn't get an item to search for" message and never says "Nothing matched", in 5 of 5 tries each.
+>
+> **Why tightened:** One filters-only query doesn't show the guard holds for each filter combination. This is not a measurability revision: the original could be scored and was met. A target that can't fail can't tell a solid agent from a lucky one.
 
 ---
 
