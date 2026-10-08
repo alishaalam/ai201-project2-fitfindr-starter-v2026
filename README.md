@@ -441,6 +441,19 @@ Couldn't reach the model, so there's no outfit yet. The model rejected your API 
 
 **Did it help, and how do I know:**
 
+**Yes, for the failure I targeted (item word first in 39 of 40 relevance queries, up from 21), and it broke nothing in the five criteria, which were 5/5 before and after.**
+
+Side by side (before is Run Log — Before above, after is the table in this section):
+
+| Criterion | Target | Before | After |
+|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | 5/5 MET | 5/5 MET |
+| 2. An impossible query stops before the second tool | 5 of 5 | 5/5 MET | 5/5 MET |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | 5/5 MET | 5/5 MET |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | 5/5 MET | 5/5 MET |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | 5/5 MET | 5/5 MET |
+| Not a criterion: item word ranked first, 40 colour + item queries | — | 21 of 40 | 39 of 40 |
+
 - **The five criteria can't show it.** They passed 5/5 before and after, so this table only shows nothing regressed. The top result for every scenario query is also unchanged (lst_002, lst_005, lst_007, and the two empty queries still return nothing).
 - **The evidence is a separate relevance check.** I ran 40 colour + item queries (e.g. `black sneakers`, `white boots`, `brown cardigan`) through the old and new ranking. A query passes if the top result's title contains the item word.
 
