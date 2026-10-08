@@ -11,6 +11,7 @@ of them are wired into the loop.
 See README.md's Tool Inventory for the full contract each one is built to.
 """
 
+import math
 import re
 
 import config
@@ -60,6 +61,16 @@ def _tokenize(text: str) -> list[str]:
     return re.sub(r"[^\w\s]", " ", text.lower()).split()
 
 
+def _word_weights(listings: list[dict]) -> dict[str, float]:
+    """Rarer words weigh more: log((N + 1) / (listings containing it + 1)) + 1."""
+    counts: dict[str, int] = {}
+    for item in listings:
+        for token in _listing_tokens(item):
+            counts[token] = counts.get(token, 0) + 1
+    n = len(listings)
+    return {t: math.log((n + 1) / (c + 1)) + 1 for t, c in counts.items()}
+
+
 def _listing_tokens(item: dict) -> set[str]:
     text = " ".join([item["title"], item["description"], " ".join(item["style_tags"])])
     return set(_tokenize(text))
@@ -81,8 +92,9 @@ def search_listings(
         max_price:   maximum price, inclusive, or None to skip price filtering.
 
     Returns:
-        A list of matching listing dicts, best match first by keyword overlap,
-        at most config.SEARCH_RESULT_LIMIT of them. Empty list when nothing
+        A list of matching listing dicts, best match first, at most
+        config.SEARCH_RESULT_LIMIT of them. Ranked by matched keywords weighted by
+        how rare each is in the catalog (ties keep file order). Empty list when nothing
         matches — never None, never an exception.
     """
     listings = load_listings()
@@ -99,7 +111,16 @@ def search_listings(
     if not query_tokens:
         return []
 
-    scored = [(item, len(query_tokens & _listing_tokens(item))) for item in candidates]
+    # Weight each query word by how rare it is across the whole catalog, so an
+    # item word ("sneakers", in 2 listings) outranks a colour ("black", in
+    # many). Counting every matched word as 1 let a common word win by file
+    # order. Document frequency is taken over all listings, not just the
+    # candidates, so a size or price filter doesn't change a word's weight.
+    weights = _word_weights(listings)
+    scored = [
+        (item, sum(weights.get(t, 1.0) for t in query_tokens & _listing_tokens(item)))
+        for item in candidates
+    ]
     scored = [(item, s) for item, s in scored if s > 0]
     scored.sort(key=lambda pair: pair[1], reverse=True)
 

@@ -59,7 +59,7 @@ FitFindr is a secondhand-clothes shopping agent. A user types a plain-language r
 
 ### `search_listings`
 
-- **What it does:** Searches the listings dataset for items matching a text description, with optional size and max-price filters, and returns the best matches ranked by keyword overlap.
+- **What it does:** Searches the listings dataset for items matching a text description, with optional size and max-price filters, and returns the best matches, ranked by matched keywords weighted by how rare each word is across the catalog (so an item word like `sneakers` outranks a colour like `black`; ties keep file order).
 - **Inputs:** `description` (str) — keywords describing what the user wants, e.g. `"vintage graphic tee"`. `size` (str | None, default `None`) — a size to filter by; `None` skips size filtering. Match rule: normalize both the requested size and each listing's size (lowercase, strip whitespace, drop any parenthetical like `"(fits oversized)"`), then match if they're equal OR both appear together in a small fixed alias table (e.g. `"m"` aliases to `"s/m"` and `"m/l"`, `"oversized"`/`"baggy"` alias to `"xl"`, `"petite"`/`"tiny"` alias to `"s"`) — no substring matching, so `"l"` never matches `"xl"`. Shoe sizes (`US 7`–`US 9`) and waist sizes (`W27`–`W32`, `W30 L30`) match only on exact equality after normalization, with no aliasing to the letter scale. A size term with no entry in the alias table (e.g. a relative description like `"big feet"`) is not parsed into `size` at all — it stays in `description`, where it only affects keyword-overlap ranking, not filtering. `max_price` (float | None, default `None`) — maximum price, inclusive; `None` skips price filtering.
 - **Returns:** A `list[dict]` of matching listings, best match first. Each dict has `id, title, description, category, style_tags (list[str]), size, condition, price (float), colors (list[str]), brand (str or None), platform`.
 - **When it has nothing:** An empty list — not `None`, and not an exception. That includes a `description` with no word characters (`""`, whitespace, `"!!!"`) and `description=None`: no keywords means nothing to rank on, so the result is `[]` regardless of size or price.
@@ -325,17 +325,15 @@ Trace:
 
 Nothing was missed, so there is no step or mechanism to name. I read each count against the original target: 5/5 against a 4-of-5 target for criterion 1, and 5/5 against 5-of-5 for the rest. I did not need a generous reading to get there.
 
-**Were the targets too low? Yes.** Every criterion passed on every try, 0 of 80 model calls failed, and a run that can't fail can't tell a solid agent from a lucky one. I'm tightening all five, with each tightened version written under the original in `criteria.md` (the originals are untouched). These are not measurability revisions: the originals could be scored, and they were met.
+**Were the targets too low? Yes.** Every criterion passed on every try, and 0 of 80 model calls failed. A target that can't fail can't tell a solid agent from a lucky one.
 
-- **Criterion 1 (4 of 5 → 5 of 5).** The slack was for a model failure with no handler. `ModelUnavailable` has been handled since Milestone 2 and no call failed.
-- **Criterion 2.** One impossible query only proves the branch for one kind of block. The tightened version uses three (words, price, size) and requires the message to name the blocking filter.
-- **Criterion 3.** The weakest check I had. The trace ids come from the same session variable that is passed on, so a swapped item could not have shown up. The tightened version compares the full dict the tools received.
-- **Criterion 4.** "Non-empty" lets a one-word or off-topic reply through. The tightened version requires at least 50 characters and a garment from the item's title.
-- **Criterion 5.** One filters-only query doesn't show the guard holds for each filter combination. The tightened version uses three.
+**The criterion I'd tighten: criterion 1, from 4 of 5 to 5 of 5.** The 4-of-5 slack was written for a model failure that `agent.py` had no handler for. `ModelUnavailable` has been handled since Milestone 2, and no call failed, so the slack was never used. The risk in 5 of 5 is that one transient API error, which is not the agent's fault, would fail it. I have not changed `criteria.md` for this one.
 
-**What these five criteria don't cover:** search relevance. `black sneakers under $60` returns the Oversized Flannel Shirt first. Two sneaker listings are under $60 (lst_019, lst_035), but each matches one query word ("sneakers") and so does every black item ("black"). Every word counts the same and ties fall back to file order, so the flannel shirt wins. This is the tool's ranking (`search_listings`), not the loop or the model. No criterion would catch it, and it is the most likely real failure in the agent.
+**One criterion was broken, not just easy: criterion 3.** It measured the wrong thing. The trace ids come from the same session variable that is passed on, so a swapped item could not have shown up. The revision sits under the original in `criteria.md`, with the original left in place. It has not been re-measured.
 
-**Caveat:** pass and fail were scored by a script I wrote, using the rules written under the Run Log — Before table. The tightened criteria have not been re-measured.
+**What these criteria don't cover:** search relevance. `black sneakers under $60` returns the Oversized Flannel Shirt first. Two sneaker listings are under $60 (lst_019, lst_035), but each matches one query word ("sneakers") and so does every black item ("black"). Every word counts the same and ties fall back to file order, so the flannel shirt wins. This is the tool's ranking (`search_listings`), not the loop or the model. No criterion would catch it, and it is the most likely real failure in the agent.
+
+**Caveat:** pass and fail were scored by a script I wrote, using the rules written under the Run Log — Before table.
 
 ---
 
@@ -425,26 +423,35 @@ Couldn't reach the model, so there's no outfit yet. The model rejected your API 
 
      `python run_eval.py --label after` -->
 
-**What I changed:**
+**What I changed:** `tools.py::search_listings` now ranks by matched keywords **weighted by how rare each word is across the 40 listings** (`_word_weights`: `log((N + 1) / (listings containing the word + 1)) + 1`), instead of counting every matched word as 1. The filters, the `[]`-when-nothing-matches contract and the result limit are unchanged.
 
-**Which failure it was meant to fix:**
+**Which failure it was meant to fix:** not one of my five criteria — none missed (see Verdicts and Diagnoses). It is the gap I flagged there: `black sneakers under $60` returned the *Oversized Flannel Shirt* first. The mechanism was in the tool, not the loop or the model: two sneaker listings are under $60 (lst_019, lst_035), but each matched one query word ("sneakers") and so did every black item ("black"). Every word counted 1 and ties fell back to file order, so the flannel shirt won. The agent then picked `search_results[0]` and styled a shirt for someone who asked for sneakers.
 
 ### Run Log — After
 
+`python run_eval.py --label after`, same five criteria, cache off. Full output: [results/run_2026-10-07_1844_after.md](results/run_2026-10-07_1844_after.md).
+
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
-| 1.  |  |  |  |  |  |  |  |
-| 2.  |  |  |  |  |  |  |  |
-| 3.  |  |  |  |  |  |  |  |
-| 4.  |  |  |  |  |  |  |  |
-| 5.  |  |  |  |  |  |  |  |
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
 **Did it help, and how do I know:**
 
-<!-- If it made things worse, say that. Honestly reported, that earns full
-     credit and is more interesting than one that worked. -->
+- **The five criteria can't show it.** They passed 5/5 before and after, so this table only shows nothing regressed. The top result for every scenario query is also unchanged (lst_002, lst_005, lst_007, and the two empty queries still return nothing).
+- **The evidence is a separate relevance check.** I ran 40 colour + item queries (e.g. `black sneakers`, `white boots`, `brown cardigan`) through the old and new ranking. A query passes if the top result's title contains the item word.
 
+| | Top result contains the item word |
+|---|---|
+| Before (every word counts 1) | 21 of 40 |
+| After (rarer words weigh more) | 39 of 40 |
 
+  18 queries were fixed and none got worse. `black sneakers` now returns Platform Sneakers first, `black boots` returns Suede Chelsea Boots, and `black dress` returns the Silk Slip Dress. The one miss is `black jacket`, which returns a black leather bomber; that is arguably right, since the title doesn't say "jacket".
+- **Limits of this evidence:** I wrote the 40 queries and the "item word in the title" rule myself, so it is a proxy for relevance and not ground truth. It only covers colour + item queries. The check script is not in the repo.
+- **A trade-off I haven't tested:** weighting by rarity favours unusual words, so a rare brand or style word in a query could outrank the item word.
 
 ---
 
