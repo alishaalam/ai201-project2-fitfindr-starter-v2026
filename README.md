@@ -282,24 +282,70 @@ that produced it:
      the same length, your branch isn't working — and this is the fastest way
      anyone will ever find that out. -->
 
-**Happy path**
+**Happy path** — `python app.py ask 'looking for a vintage graphic tee under $30' --trace`
 
 ```
-
+[1] search_listings (via MCP)
+      in:  description='vintage graphic tee', size=None, max_price=30.0
+      out: 10 items: Y2K Baby Tee — Butterfly Print, Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey … +7 more
+[2] select
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      →    took search_results[0]
+[3] suggest_outfit
+      in:  item='Y2K Baby Tee — Butterfly Print', wardrobe=10 items
+      out: Pair the Y2K baby tee with your baggy straight-leg jeans, dark wash to balance the fitted top with streetwear …
+[4] create_fit_card
+      in:  item='Y2K Baby Tee — Butterfly Print', outfit='Pair the Y2K baby tee with your baggy st'…
+      out: I am absolutely losing my mind over this butterfly print Y2K baby tee I just scored on depop for only $18! It’…
 ```
 
-**Empty search**
+**Empty search** — `python app.py ask 'designer ballgown size XXS under $5' --trace`
 
 ```
-
+[1] search_listings (via MCP)
+      in:  description='designer ballgown', size='XXS', max_price=5.0
+      out: [] (empty)
+[2] branch
+      →    search_listings returned nothing, stopping before suggest_outfit
 ```
 
-**On the MCP move:** <!-- what changed in your code, and whether anything
-behaved differently afterwards. If the rewire didn't work, say exactly where it
-broke — the error text and the last thing that worked. That earns the point in
-full. -->
+**On the MCP move:** I registered `search_listings` in `mcp_server.py` with a description written for a caller who can't see my code (units, result fields, empty-list case) and swapped the first-pass call in `run_agent()` for `call_tool("search_listings", {...})`. Nothing behaved differently: for `"graphic tee"` under $30, the MCP result was identical to the direct call (same 6 listings, same order), and so were three empty cases (`"!!!"`, `jacket` size `XXS`, `jeans` size `W30` under $50). The two diagnostic searches inside `_empty_message()` still call `tools.search_listings` directly; they are part of the empty-search step, not separate loop steps, and routing them through MCP would only add server launches to the failure path.
 
+---
 
+## Failure Modes
+
+Each triggered on purpose, one at a time. What the agent said:
+
+**1. Empty search** — `python app.py ask 'luxury dress under $1'`
+
+```
+  Nothing matched "luxury dress", under $1. 1 match without the price cap — the cheapest is $30, so raise your max to at least that.
+
+0 model calls this session
+```
+
+**2. Empty wardrobe** — `python app.py ask 'vintage graphic tee under $30' --empty-wardrobe`
+
+```
+(running with an empty wardrobe)
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   This pastel butterfly baby tee looks amazing paired with high-waisted, light-wash straight-leg jeans and chunky white sneakers for an effortless Y2K daytime look. To lean into the cottagecore vibe, you can also style it tucked into an olive green or denim midi skirt with comfortable canvas slip-ons. Stick to bottoms in white, light denim, or earthy tones so the pink and purple graphic really pops without competing for attention.
+
+  Fit card: Still screaming because I just scored this dreamy Y2K butterfly baby tee on depop for only $18! It's giving major nostalgia, and I can't wait to throw it on with some high-waisted light-wash straight-leg jeans and chunky white sneakers for the easiest daytime fit. Such a good find!
+
+2 model calls this session, 433 prompt + 156 output tokens
+```
+
+**3. Model unavailable** — one character of `GEMINI_API_KEY` changed, then `python app.py ask 'black denim jacket'`
+
+```
+Couldn't reach the model, so there's no outfit yet. The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com. Fix that, then run the same query again.
+
+1 model calls this session
+```
 
 ---
 

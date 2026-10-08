@@ -17,6 +17,7 @@ import re
 
 import config
 import trace
+from mcp_client import call_tool
 from tools import search_listings, suggest_outfit, create_fit_card
 from generate import ModelUnavailable
 
@@ -119,33 +120,68 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
         if not session["search_results"] and session["error"] is None and count == 1:
             parsed = session["parsed"]
-            session["search_results"] = search_listings(
-                parsed["description"], size=parsed["size"], max_price=parsed["max_price"]
-            )
+            args = {
+                "description": parsed["description"],
+                "size": parsed["size"],
+                "max_price": parsed["max_price"],
+            }
+            session["search_results"] = call_tool("search_listings", args)
+            trace.step("search_listings (via MCP)",
+                       inputs=", ".join(f"{k}={v!r}" for k, v in args.items()),
+                       returned=session["search_results"])
             continue
 
         # THE BRANCH: nothing came back, so stop before suggest_outfit.
         if not session["search_results"]:
             session["error"] = _empty_message(session["parsed"])
+            trace.step("branch", note="search_listings returned nothing, stopping "
+                                      "before suggest_outfit")
             return session
 
         if session["selected_item"] is None:
             session["selected_item"] = session["search_results"][0]
+            trace.step("select", returned=session["selected_item"],
+                       note="took search_results[0]")
             continue
 
         if session["outfit_suggestion"] is None:
-            session["outfit_suggestion"] = suggest_outfit(
-                session["selected_item"], session["wardrobe"]
-            )
+            try:
+                session["outfit_suggestion"] = suggest_outfit(
+                    session["selected_item"], session["wardrobe"]
+                )
+            except ModelUnavailable as exc:
+                return _model_down(session, "suggest_outfit", exc)
+            trace.step("suggest_outfit",
+                       inputs=f"item={session['selected_item']['title']!r}, "
+                              f"wardrobe={len(session['wardrobe']['items'])} items",
+                       returned=session["outfit_suggestion"])
             continue
 
         if session["fit_card"] is None:
-            session["fit_card"] = create_fit_card(
-                session["outfit_suggestion"], session["selected_item"]
-            )
+            try:
+                session["fit_card"] = create_fit_card(
+                    session["outfit_suggestion"], session["selected_item"]
+                )
+            except ModelUnavailable as exc:
+                return _model_down(session, "create_fit_card", exc)
+            trace.step("create_fit_card",
+                       inputs=f"item={session['selected_item']['title']!r}, "
+                              f"outfit={session['outfit_suggestion'][:40]!r}…",
+                       returned=session["fit_card"])
             continue
 
         return session
+
+
+def _model_down(session: dict, tool: str, exc: ModelUnavailable) -> dict:
+    """Stop the run with a message instead of a stack trace."""
+    session["error"] = (
+        f"Couldn't reach the model, so there's no "
+        f"{'outfit' if tool == 'suggest_outfit' else 'fit card'} yet. {exc} "
+        f"Fix that, then run the same query again."
+    )
+    trace.step(tool, note="model unavailable, stopping")
+    return session
 
 
 def _parse_query(query: str) -> dict:
