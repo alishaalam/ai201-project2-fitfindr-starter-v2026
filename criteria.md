@@ -69,29 +69,7 @@ limitation of any tool, the same reasoning that makes criterion 2 a 5/5.
 
 ---
 
-## 4. The fit card always names the real price and platform
-
-Given 5 fit cards generated for 5 different items, each card contains the
-item's price as a literal `$` dollar figure and its platform name, each
-exactly once as a substring — in at least 4 of 5 tries.
-
-**Why this target:** `create_fit_card` calls a model, so the wording will
-differ every time by design (see `config.TEMPERATURE`) — that's not what this
-criterion checks. It checks two specific facts the prompt is supposed to force
-into the output every time: the price and the platform, both pulled straight
-from `new_item`, not invented by the model. Whether those facts show up is a
-test of whether the prompt reliably constrains the model's formatting, and
-models don't follow formatting instructions with perfect consistency — so 4/5
-leaves room for an occasional drop without treating a single miss as proof the
-tool is broken, the same shape of reasoning as criterion 1. Every listing in
-`data/listings.json` has a non-null `price` and `platform` (checked all 40),
-so the model always has both facts available going in — a miss here is never
-a missing-data edge case, it's unambiguously the model dropping or
-reformatting a fact it was given.
-
----
-
-## 5. The empty-wardrobe path never falls back to nothing
+## 4. The empty-wardrobe path never falls back to nothing
 
 Given a query run through the full agent loop with an empty wardrobe
 (`wardrobe['items'] == []`), `suggest_outfit` returns a non-empty string of
@@ -105,10 +83,27 @@ vary. The only thing that could vary between tries is the model call itself:
 an unhandled model-call failure (`ModelUnavailable`, which `agent.py` doesn't
 catch yet) would crash one try while the others complete normally. I picked
 this over the price-ceiling or speed options because the empty-wardrobe path
-is otherwise untested by the other four criteria, and I'd rather find out now
+is otherwise untested by the other three criteria, and I'd rather find out now
 whether it actually holds than discover it during grading.
 
 
+
+---
+
+## 5. A query with filters but no item word says no item was given
+
+Given a query that has a size or price but no item word (e.g. `size M under
+$50`), the agent stops before calling `suggest_outfit` and returns a message
+saying it didn't get an item to search for — not a message claiming nothing
+matched — in 5 of 5 tries.
+
+**Why this target:** With no keywords, `search_listings` returns `[]`
+regardless of size or price (see Tool Inventory), so the branch in `run_agent`
+always takes the stop path, and `_empty_message` checks for the empty
+description before it looks at any filter. No model is involved, so nothing can
+vary between tries. It earns its own criterion because the message used to be
+wrong: it printed `Nothing matched ""` and said no listing contains those
+words, which was false since no keyword had been searched.
 
 ---
 

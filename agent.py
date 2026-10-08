@@ -140,7 +140,8 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
         if session["selected_item"] is None:
             session["selected_item"] = session["search_results"][0]
-            trace.step("select", returned=session["selected_item"],
+            trace.step("select", inputs=f"id={session['selected_item']['id']}",
+                       returned=session["selected_item"],
                        note="took search_results[0]")
             continue
 
@@ -152,7 +153,8 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             except ModelUnavailable as exc:
                 return _model_down(session, "suggest_outfit", exc)
             trace.step("suggest_outfit",
-                       inputs=f"item={session['selected_item']['title']!r}, "
+                       inputs=f"id={session['selected_item']['id']}, "
+                              f"item={session['selected_item']['title']!r}, "
                               f"wardrobe={len(session['wardrobe']['items'])} items",
                        returned=session["outfit_suggestion"])
             continue
@@ -165,7 +167,8 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             except ModelUnavailable as exc:
                 return _model_down(session, "create_fit_card", exc)
             trace.step("create_fit_card",
-                       inputs=f"item={session['selected_item']['title']!r}, "
+                       inputs=f"id={session['selected_item']['id']}, "
+                              f"item={session['selected_item']['title']!r}, "
                               f"outfit={session['outfit_suggestion'][:40]!r}…",
                        returned=session["fit_card"])
             continue

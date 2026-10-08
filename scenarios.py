@@ -29,32 +29,28 @@ SCENARIOS = [
         "criterion": 2,
     },
     {
-        # A user with nothing saved. One of unit 4's three failure modes.
+        # Any normal query. Criterion 3 checks the id in the trace at
+        # select, suggest_outfit and create_fit_card.
+        "name": "item identity through the pipeline",
+        "query": "corduroy pants",
+        "wardrobe": "example",
+        "criterion": 3,
+    },
+    {
+        # A user with nothing saved. Criterion 4.
         "name": "empty wardrobe",
         "query": "denim jacket under $50",
         "wardrobe": "empty",
-        "criterion": None,
+        "criterion": 4,
     },
     {
         # Filters but no item word. Hits the "no item to search for" message,
-        # not the "nothing matched" one. Diagnostic.
+        # not the "nothing matched" one. Criterion 5.
         "name": "filters only, no item word",
         "query": "size M under $50",
         "wardrobe": "example",
-        "criterion": None,
+        "criterion": 5,
     },
-    # TODO: add what your criteria 3, 4 and 5 need.
-    #
-    # Set "criterion" to the number in criteria.md that the scenario tests.
-    # "criterion": None means a diagnostic run — useful to have, but it isn't
-    # one of your five, and run_eval.py marks it as such in the table.
-    #
-    # For a state criterion, any normal query works — what you're checking is
-    # what ends up in the session, not what the user typed.
-    #
-    # For a fit-card criterion, you probably want the SAME query listed more
-    # than once, or several different items, depending on what your criterion
-    # actually says.
 ]
 
 WARDROBES = ("example", "empty")
