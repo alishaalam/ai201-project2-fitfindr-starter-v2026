@@ -470,11 +470,23 @@ Side by side (before is Run Log — Before above, after is the table in this sec
 
 ## What's Still Broken
 
-<!-- For each criterion still missed: what you'd do, and why you stopped where
-     you did. "I ran out of time" is fine if it's true. Pretending nothing is
-     left is not. -->
+No criterion is currently missed (all five are 5/5, before and after). What's left is what the criteria can't see, and a few things I know are weak.
 
+**Search ranking, which is where the one change landed**
+- **A rare style word can still beat the item word.** `y2k black dress` returns Platform Mary Janes first and the Silk Slip Dress second, because `y2k` is a rare tag and the rarity weighting that fixed `black sneakers` also rewards it. This is the trade-off I flagged and had not tested; now I have. I would add a bonus for matching the item word in the title, but that is a second change, and the milestone asks for one.
+- **Words that aren't in the searched text find nothing.** `shoes` and `trainers` return `[]` even though the catalog has shoes, because the search reads only title, description and style tags, not `category`. The brand isn't searched either: `wrangler jacket` doesn't put the Wrangler denim jacket first, because "Wrangler" is in the `brand` field and not in the text. I would index `category` and `brand` and add a small synonym list, and I stopped because it is a separate change from the weighting.
+- **My evidence for the fix is a proxy.** The 21 → 39 of 40 result uses queries and a "noun in the title" rule I wrote, and covers only colour + item queries.
 
+**Measurement**
+- **Criterion 3's revision has not been re-measured.** It now asks for the full dict the tools received, captured from the tool calls, but the eval still reads ids from the trace. I would wrap the two tools in the eval to record their arguments. I stopped because the revision was only written this unit.
+- **Criterion 1 still says 4 of 5 in `criteria.md`.** I named it as the one to tighten but did not edit it, since a tightening isn't one of the two kinds of change that count.
+- **Pass and fail were scored by a script I wrote,** using the rules under Run Log — Before.
+
+**The agent**
+- **The diagnostic searches in `_empty_message()` call `tools.search_listings` directly,** not through MCP, so the failure path uses a different route from the main search. I left them because routing them through MCP would add up to two server launches to a failed search.
+- **`call_tool` starts and stops the server on every call,** which adds latency. I haven't measured it.
+- **`trace.step()` prints as it records,** so a run without `--trace` still shows the step lines. I left `trace.py` alone.
+- **With an empty wardrobe, the agent gives generic advice and doesn't say so.** It passes criterion 4, but the user isn't told that nothing was drawn from their wardrobe.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
