@@ -52,6 +52,21 @@ SCENARIOS = [
         "criterion": 6,
     },
     {
+        # Stretch. A rare style word, a colour and an item word. Criterion 8.
+        "name": "style tag does not outrank the item word",
+        "query": "y2k black dress",
+        "wardrobe": "example",
+        "criterion": 8,
+    },
+    {
+        # Stretch. A size that blocks the search while other sizes exist.
+        # Criterion 9 checks the retry without the size and that it says so.
+        "name": "size retry names what it dropped",
+        "query": "graphic tee size XXS",
+        "wardrobe": "example",
+        "criterion": 9,
+    },
+    {
         # Filters but no item word. Hits the "no item to search for" message,
         # not the "nothing matched" one. Criterion 5.
         "name": "filters only, no item word",

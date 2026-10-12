@@ -59,7 +59,7 @@ FitFindr is a secondhand-clothes shopping agent. A user types a plain-language r
 
 ### `search_listings`
 
-- **What it does:** Searches the listings dataset for items matching a text description, with optional size and max-price filters, and returns the best matches, ranked by matched keywords weighted by how rare each word is across the catalog (so an item word like `sneakers` outranks a colour like `black`; ties keep file order).
+- **What it does:** Searches the listings dataset for items matching a text description, with optional size and max-price filters, and returns the best matches, ranked by matched keywords weighted by how rare each word is across the catalog, with a bonus for a word that is in the title (so an item word like `sneakers` outranks a colour like `black`, and `dress` outranks a rare style tag like `y2k`; ties keep file order).
 - **Inputs:** `description` (str) — keywords describing what the user wants, e.g. `"vintage graphic tee"`. `size` (str | None, default `None`) — a size to filter by; `None` skips size filtering. Match rule: normalize both the requested size and each listing's size (lowercase, strip whitespace, drop any parenthetical like `"(fits oversized)"`), then match if they're equal OR both appear together in a small fixed alias table (e.g. `"m"` aliases to `"s/m"` and `"m/l"`, `"oversized"`/`"baggy"` alias to `"xl"`, `"petite"`/`"tiny"` alias to `"s"`) — no substring matching, so `"l"` never matches `"xl"`. Shoe sizes (`US 7`–`US 9`) and waist sizes (`W27`–`W32`, `W30 L30`) match only on exact equality after normalization, with no aliasing to the letter scale. A size term with no entry in the alias table (e.g. a relative description like `"big feet"`) is not parsed into `size` at all — it stays in `description`, where it only affects keyword-overlap ranking, not filtering. `max_price` (float | None, default `None`) — maximum price, inclusive; `None` skips price filtering.
 - **Returns:** A `list[dict]` of matching listings, best match first. Each dict has `id, title, description, category, style_tags (list[str]), size, condition, price (float), colors (list[str]), brand (str or None), platform`.
 - **When it has nothing:** An empty list — not `None`, and not an exception. That includes a `description` with no word characters (`""`, whitespace, `"!!!"`) and `description=None`: no keywords means nothing to rank on, so the result is `[]` regardless of size or price.
@@ -608,6 +608,64 @@ I would leave the MCP routing of the diagnostic searches and the trace printing 
 | C | **A second tool on MCP:** `create_fit_card` | Shows the seam on a tool that calls the model, which `search_listings` does not | Criteria 1–9 stay met; criterion 7 (price and platform on the card) re-scored; two runs of one query still give different cards, so the cache setting reaches the server |
 
 Order: A, then B, then C, with a full run (`run_eval.py`, 5 tries per scenario, cache off) before and after each. I expect C to need one extra change I'll report: the MCP client starts the server with a restricted environment, so the eval's cache-off setting would not reach it.
+
+### A. Second improvement: an item-word-in-the-title bonus (done)
+
+**Diagnosis it follows.** Place: the tool, `search_listings`. Mechanism: the rarity weighting that fixed `black sneakers` also rewards any rare word, so for `y2k black dress` the tag `y2k` (in few listings) lifted Platform Mary Janes above the one dress. This is the failure my own core change introduced, named under What's Still Broken.
+
+**What I changed (`tools.py::search_listings`, one thing).** A query word that appears in a listing's **title** now counts three times (`_TITLE_BONUS = 2` extra). I tried bonuses of 0, 0.5, 1, 1.5 and 2 on three checks (my 40 colour + item queries, seven style-tag queries, and the top result for the scenario queries). Only 2 fixed `y2k black dress` and `goth black boots` without losing anything on the 40 queries (39 of 40, unchanged). I picked 2 because 1 left `goth black boots` wrong.
+
+**Run logs, same format** (`python run_eval.py`, cache off, 5 tries each). Criterion 8 is the new stretch criterion in `criteria.md`.
+
+Before, the code at tag `unit4-core` plus the two stretch scenarios: [results/run_2026-10-12_0901_stretch_baseline.md](results/run_2026-10-12_0901_stretch_baseline.md)
+
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL | MISSED (0/5) |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL | MISSED (0/5) |
+
+After the title bonus: [results/run_2026-10-12_0905_stretch_title_bonus.md](results/run_2026-10-12_0905_stretch_title_bonus.md)
+
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL | MISSED (0/5) |
+
+Side by side:
+
+| Criterion | Target | Before | After |
+|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | 5/5 MET | 5/5 MET |
+| 2. An impossible query stops before the second tool | 5 of 5 | 5/5 MET | 5/5 MET |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | 5/5 MET | 5/5 MET |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | 5/5 MET | 5/5 MET |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | 5/5 MET | 5/5 MET |
+| 6. The item word outranks a colour in the search | 5 of 5 | 5/5 MET | 5/5 MET |
+| 7. The fit card always names the real price and platform | 4 of 5 | 5/5 MET | 5/5 MET |
+| **8. A rare style word doesn't outrank the item word** | 5 of 5 | **0/5 MISSED** | **5/5 MET** |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | 0/5 MISSED | 0/5 MISSED |
+
+Criterion 8, try 1. Before: `Platform Mary Janes — Black Patent ($55.0, depop)`. After: `90s Silk Slip Dress — Floral, Midi Length ($30.0, depop)`.
+
+**Did it help:** yes: criterion 8 went from 0 of 5 to 5 of 5, and criteria 1–7 stayed at their earlier counts. Criterion 9 is unchanged at 0 of 5, because it belongs to the retry feature below.
+
+**A side effect I'm reporting, not hiding.** The top result for `vintage graphic tee under $30`, which is criterion 1's query, changed from Y2K Baby Tee ($18, depop) to Graphic Tee — 2003 Tour Bootleg Style ($24, depop). Its title now contains both "graphic" and "tee", which I think is a better answer, but it is a change in what the agent returns. Criterion 7 is scored against whichever item was selected, so it still passes.
+
+**Trade-offs and limits.** The bonus favours listings whose *title* matches, so a good listing whose title omits the item word (a "90s Leather Bomber" for `jacket`) ranks lower; `90s black jacket` still returns the bomber first, which I think is fine. My checks are queries I wrote, and criterion 8 is one deterministic query that I wrote after finding the failure.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 

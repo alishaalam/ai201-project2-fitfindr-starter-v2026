@@ -173,6 +173,40 @@ reformatting a fact it was given.
 
 ---
 
+## 8. A rare style word doesn't outrank the item word
+
+> **Stretch criterion, written with the stretch work.** Like criterion 6, it is
+> written after I found the failure, so it measures one known bug. Not part of
+> the graded unit.
+
+Given a query with a rare style word, a colour and an item word
+(`y2k black dress`), the title of `session["selected_item"]` contains the item
+word `dress` — 5 of 5 tries.
+
+**Why this target:** `search_listings` is deterministic, so the five tries
+can't split. The rarity weighting that fixed `black sneakers` also rewards a
+rare style tag: `y2k` appears in few listings, so a Mary Janes listing tagged
+`y2k` outscored the one dress. A deterministic query is 5 of 5 or 0 of 5.
+
+---
+
+## 9. A size that blocks the search is dropped once, and the agent says so
+
+> **Stretch criterion, written with the stretch work.** Not part of the graded
+> unit.
+
+Given a query whose size filter matches nothing while listings exist in other
+sizes (`graphic tee size XXS`), the agent retries once without the size,
+completes all three tools, and the trace names the size it dropped — 5 of 5
+tries.
+
+**Why this target:** whether the size blocked the search is a deterministic
+check, so the retry always fires. The later steps call the model, which could
+fail on a transient error, but 0 of 80 model calls failed in the core run, so a
+5 of 5 target is a fair reading and I'll say so if it misses.
+
+---
+
 <!-- ─────────────────────────────────────────────────────────────────────────
      UNIT 4 — read this before you change anything above.
 

@@ -61,6 +61,13 @@ def _tokenize(text: str) -> list[str]:
     return re.sub(r"[^\w\s]", " ", text.lower()).split()
 
 
+# A query word that appears in a listing's title counts this many times extra.
+# Rarity weighting alone let a rare style tag ("y2k") outrank the item word
+# ("dress") because the tag appears in few listings; a title match says the
+# listing *is* the thing, not just tagged with it.
+_TITLE_BONUS = 2
+
+
 def _word_weights(listings: list[dict]) -> dict[str, float]:
     """Rarer words weigh more: log((N + 1) / (listings containing it + 1)) + 1."""
     counts: dict[str, int] = {}
@@ -94,7 +101,8 @@ def search_listings(
     Returns:
         A list of matching listing dicts, best match first, at most
         config.SEARCH_RESULT_LIMIT of them. Ranked by matched keywords weighted by
-        how rare each is in the catalog (ties keep file order). Empty list when nothing
+        how rare each is in the catalog, with a bonus for words in the title
+        (ties keep file order). Empty list when nothing
         matches — never None, never an exception.
     """
     listings = load_listings()
@@ -117,10 +125,14 @@ def search_listings(
     # order. Document frequency is taken over all listings, not just the
     # candidates, so a size or price filter doesn't change a word's weight.
     weights = _word_weights(listings)
-    scored = [
-        (item, sum(weights.get(t, 1.0) for t in query_tokens & _listing_tokens(item)))
-        for item in candidates
-    ]
+    scored = []
+    for item in candidates:
+        in_title = set(_tokenize(item["title"]))
+        score = sum(
+            weights.get(t, 1.0) * (1 + _TITLE_BONUS if t in in_title else 1)
+            for t in query_tokens & _listing_tokens(item)
+        )
+        scored.append((item, score))
     scored = [(item, s) for item, s in scored if s > 0]
     scored.sort(key=lambda pair: pair[1], reverse=True)
 
