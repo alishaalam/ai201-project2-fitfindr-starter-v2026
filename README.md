@@ -182,6 +182,20 @@ some fresh white sneakers for the ultimate effortless look.
   I checked all four branches by running them, and the happy path still reaches the fit card. The trade-off is up to two extra local searches on an empty result, which is cheap because search is not a model call.
 - *What's still imperfect:* the size list for `graphic tee size XXS` includes `W29`, a waist size, because the search ranks on keyword overlap and a bottoms listing shares a word with the query. The suggestion is accurate to what the tool returned but is not a size a tee buyer would want.
 
+**Moment 3 — diagnosing the search-ranking failure (Unit 4, Milestones 4–5)**
+
+- *What I asked for:* All five criteria passed, so I asked Claude to address the search-relevance gap it had flagged: `black sneakers under $60` returned an Oversized Flannel Shirt first.
+- *What came back:* A first explanation that said no sneaker outranked the shirt. Claude then checked it before it went into the README, and the claim was wrong. The real cause: two sneaker listings are under $60, but each matched one query word and so did every black item, so they tied at 1 and file order decided. Claude proposed weighting each word by how rare it is across the catalog, tried it on 13 queries, and I kept it.
+- *What I changed:* `tools.py::search_listings` now uses `_word_weights` (rarity weighting). Because none of my five criteria could see the failure, I also had criterion 6 added, so the before and after run logs would differ: criterion 6 went from 0/5 to 5/5, and criteria 1–5 stayed 5/5.
+- *What I did not take on trust:* Claude's 21 → 39 of 40 relevance check uses queries and a scoring rule it wrote, so I treat it as a proxy. Claude also found a new failure the fix creates (`y2k black dress`, where a rare style tag beats the item word), which is under What's Still Broken.
+
+**Moment 4 — deciding which criterion changes count (Unit 4, Milestone 4)**
+
+- *What I asked for:* Nothing was missed, so I told Claude to tighten all five criteria and write each tightened version under its original in `criteria.md`.
+- *What came back:* Five tightened versions. When I pasted the milestone text, Claude pointed out that only one kind of change counts, a criterion that couldn't be measured, and that only criterion 3 qualified: its trace ids came from the same session variable that gets passed on, so it could not detect a swap. The other four were tightenings of targets that had been met.
+- *What I changed:* I had Claude remove the four tightenings, keep criterion 3 as a measurability revision under the original, and name criterion 1 (4 of 5 → 5 of 5) in Diagnoses as the one I would tighten, without editing it.
+- *Mistakes Claude made during the unit:* its first scoring script marked criterion 2 as 0/5 because it matched the word "suggest_outfit" inside the branch note, which it caught because 0/5 looked wrong and then fixed. It also flagged `'denimjacket'` in the empty-description message as a bug, but the one-word spelling came from text I had pasted. The code had `'denim jacket'`.
+
 **Everything else AI did in this project**
 
 | Milestone | What Claude did | Result |
@@ -191,6 +205,17 @@ some fresh white sneakers for the ultimate effortless look.
 | 4 | Implemented `search_listings`, `suggest_outfit`, `create_fit_card` in `tools.py` | `6efacd8`; per-tool tests below |
 | 5 | Implemented `run_agent`, `_parse_query`, `_empty_message` | `58a1a94` |
 | 6 | Filled in this README from verified output (nothing pasted that wasn't run) | this commit |
+
+*Unit 4:*
+
+| Milestone | What Claude did | Result |
+|---|---|---|
+| 1 | Registered `search_listings` on the MCP server and swapped the call in `run_agent()` for `call_tool`; checked the MCP and direct results were identical | `b601683` |
+| 2 | Added the `trace.step()` calls and a `ModelUnavailable` handler; I triggered the three failures and the outputs are under Failure Modes | `b601683` |
+| 3 | Wrote the scenarios, ran `run_eval.py --label before`, and scored the tries with a script | `2e1ea41` |
+| 4 | Drafted verdicts and diagnoses; rewrote them after I pasted the milestone text | `344a7f1`, `05372a7` |
+| 5 | Changed the search ranking; added criterion 6 and re-ran before and after so the logs differ | `05372a7`, `4a05b7c`, `2e4b627` |
+| 6 | Wrote What's Still Broken and this section | this commit |
 
 **Open Questions (empty-search message)**
 
@@ -518,6 +543,16 @@ No criterion is currently missed (all six are 5/5 after the fix). What's left is
 - **`call_tool` starts and stops the server on every call,** which adds latency. I haven't measured it.
 - **`trace.step()` prints as it records,** so a run without `--trace` still shows the step lines. I left `trace.py` alone.
 - **With an empty wardrobe, the agent gives generic advice and doesn't say so.** It passes criterion 4, but the user isn't told that nothing was drawn from their wardrobe.
+
+**My call on what's left**
+
+No criterion is missed, so nothing here blocks the five-tries-each result. I am submitting with these open, and the reason is the milestone's one-change rule, not time: the search change was the one my diagnosis named, and each item below would be a second change that needs its own before and after run. If I did one more thing, in this order:
+
+1. **Add an item-word bonus in the title**, which fixes `y2k black dress` and is the failure my own fix introduced. It is measurable by adding that query to criterion 6.
+2. **Index `category` and `brand`** so `shoes` and `wrangler jacket` find what is there.
+3. **Measure criterion 3 as revised**, by recording what each tool actually received.
+
+I would leave the MCP routing of the diagnostic searches and the trace printing alone, because they cost little and none of them changes what a user sees.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
