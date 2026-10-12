@@ -193,7 +193,7 @@ some fresh white sneakers for the ultimate effortless look.
 
 - *What I asked for:* Nothing was missed, so I told Claude to tighten all five criteria and write each tightened version under its original in `criteria.md`.
 - *What came back:* Five tightened versions. When I pasted the milestone text, Claude pointed out that only one kind of change counts, a criterion that couldn't be measured, and that only criterion 3 qualified: its trace ids came from the same session variable that gets passed on, so it could not detect a swap. The other four were tightenings of targets that had been met.
-- *What I changed:* I had Claude remove the four tightenings, keep criterion 3 as a measurability revision under the original, and name criterion 1 (4 of 5 → 5 of 5) in Diagnoses as the one I would tighten, without editing it.
+- *What I changed:* I had Claude remove the four tightenings, keep criterion 3 as a measurability revision under the original, and name criterion 1 (4 of 5 → 5 of 5) in Diagnoses as the one I would tighten, without editing it. Earlier I had also told Claude to delete the original fit-card criterion. The page says never to delete an original, so I had it restored as criterion 7 with a measurability revision under it (the original mixed "5 different items" with "4 of 5 tries", so it could not be scored as written).
 - *Mistakes Claude made during the unit:* its first scoring script marked criterion 2 as 0/5 because it matched the word "suggest_outfit" inside the branch note, which it caught because 0/5 looked wrong and then fixed. It also flagged `'denimjacket'` in the empty-description message as a bug, but the one-word spelling came from text I had pasted. The code had `'denim jacket'`.
 
 **Everything else AI did in this project**
@@ -211,7 +211,7 @@ some fresh white sneakers for the ultimate effortless look.
 | Milestone | What Claude did | Result |
 |---|---|---|
 | 1 | Registered `search_listings` on the MCP server and swapped the call in `run_agent()` for `call_tool`; checked the MCP and direct results were identical | `b601683` |
-| 2 | Added the `trace.step()` calls and a `ModelUnavailable` handler; I triggered the three failures and the outputs are under Failure Modes | `b601683` |
+| 2 | Added the `trace.step()` calls and a `ModelUnavailable` handler; I triggered the three failures and the outputs are under Failure Modes. I had Claude say what a user could try after each message; the model-unavailable one gave an end user nothing, so it was reworded | `b601683`, then the message rewording |
 | 3 | Wrote the scenarios, ran `run_eval.py --label before`, and scored the tries with a script | `2e1ea41` |
 | 4 | Drafted verdicts and diagnoses; rewrote them after I pasted the milestone text | `344a7f1`, `c21cc26` |
 | 5 | Changed the search ranking; added criterion 6 and re-ran before and after so the logs differ | `c21cc26`, `d3738f9`, `fbcf112` |
@@ -247,6 +247,7 @@ some fresh white sneakers for the ultimate effortless look.
 | 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 6. The item word outranks a colour in the search | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL | MISSED (0/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
 How each was scored:
 - **1:** no crash, no `session["error"]`, non-empty `fit_card`. One fixed query, 5 runs.
@@ -255,6 +256,7 @@ How each was scored:
 - **4:** no crash, no `session["error"]`, non-empty `outfit_suggestion`. One fixed query with `wardrobe["items"] == []`, 5 runs.
 - **5:** `session["error"]` starts with "I didn't get an item to search for", does not contain "Nothing matched", and the trace has no `suggest_outfit` or `create_fit_card` step. One fixed query, 5 runs.
 - **6:** the title of `session["selected_item"]` contains the item word `sneakers`. One fixed query (`black sneakers under $60`), 5 runs.
+- **7:** the fit card contains the price as `$18` (or `$18.00`) exactly once and the platform `depop` exactly once, ignoring case. Scored on the five fit cards from the criterion 1 scenario, which is one item (lst_002) run 5 times.
 
 **Real output from one try**, pasted as text, naming the file and function that produced it:
 
@@ -338,6 +340,12 @@ Trace:
       →    took search_results[0]
 ```
 
+**Criterion 7** — `tools.py::create_fit_card`, item lst_002 ($18, depop), try 1 of the criterion 1 scenario (from [results/run_2026-10-11_1926_before_6criteria.md](results/run_2026-10-11_1926_before_6criteria.md)). `$18` and `depop` each appear once:
+
+```
+Found the absolute cutest butterfly baby tee on depop today for only $18 and I’m literally obsessed! I can't wait to style it with some baggy dark wash jeans and chunky white sneakers, then just throw on a cropped denim jacket when it gets chilly. Total Y2K dream find!
+```
+
 ---
 
 ## Verdicts and Diagnoses
@@ -366,10 +374,11 @@ Trace:
 | 4 | The empty-wardrobe path never falls back to nothing | 5 of 5 | MET (5/5) | Every try returned a non-empty `outfit_suggestion` with no crash, and the five answers were all different. |
 | 5 | A query with filters but no item word says no item was given | 5 of 5 | MET (5/5) | Every message started "I didn't get an item to search for", none said "Nothing matched", and there was no tool-2 step. |
 | 6 | The item word outranks a colour in the search | 5 of 5 | MISSED (0/5) | All five tries selected the Oversized Flannel Shirt for `black sneakers under $60`; no title contained "sneakers". Read against the 5-of-5 target, 0 passes is a miss. |
+| 7 | The fit card always names the real price and platform | 4 of 5 | MET (5/5) | `$18` and `depop` each appeared exactly once on all five fit cards, before the search fix and after it. Read against a 4-of-5 target, 5 is met. |
 
 **Diagnoses**
 
-Criteria 1–5 were all met, so there is nothing to diagnose in them. I read each count against the original target: 5/5 against a 4-of-5 target for criterion 1, and 5/5 against 5-of-5 for the rest. Criterion 6 missed, and it was added after the first five were measured, so read it as a measurement of one known bug. See below.
+Criteria 1–5 and 7 were all met, so there is nothing to diagnose in them. (Criterion 7 is the original fit-card criterion, restored: see `criteria.md`.) I read each count against the original target: 5/5 against a 4-of-5 target for criterion 1, and 5/5 against 5-of-5 for the rest. Criterion 6 missed, and it was added after the first five were measured, so read it as a measurement of one known bug. See below.
 
 **The miss: criterion 6, 0 of 5. Place: a tool, `search_listings`. Mechanism: the ranking.** For `black sneakers under $60`, two sneaker listings are under $60 (lst_019, lst_035), but each matches one query word ("sneakers"), and so does every black item ("black"). The score was the number of matched words, so they all scored 1 and ties fell back to file order, which put the Oversized Flannel Shirt (lst_003) first. The loop then took `search_results[0]` and styled a shirt for someone who asked for sneakers. The loop and the model both did what they were told. The tool handed them the wrong first result, and no criterion had been checking the order of the results. Because search is deterministic, all five tries failed in the same way: one problem, not five.
 
@@ -454,13 +463,14 @@ Each triggered on purpose, one at a time. What the agent said:
 2 model calls this session, 433 prompt + 156 output tokens
 ```
 
-**3. Model unavailable** — one character of `GEMINI_API_KEY` changed, then `python app.py ask 'black denim jacket'`
+**3. Model unavailable** — a wrong `GEMINI_API_KEY` set for the one command (`GEMINI_API_KEY=badkey123 python app.py ask 'a denim jacket'`, a query I had not run before, so it was not served from the cache)
 
 ```
-Couldn't reach the model, so there's no outfit yet. The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com. Fix that, then run the same query again.
-
-1 model calls this session
+  Couldn't reach the model, so there's no outfit yet. Your search worked and nothing you typed was wrong. Wait a minute and run the same query again. If it keeps failing, tell whoever runs this app that its connection to the model is down.
+  For whoever runs the app: The model rejected your API key. Check GEMINI_API_KEY in your .env file, or create a fresh key at aistudio.google.com.
 ```
+
+I pasted all three messages into Claude and asked what a user who can't see the code would try next. The empty-search message gives a concrete next step (raise the max to at least $30). The empty-wardrobe message does too (name an item). My first model-unavailable message ("Check GEMINI_API_KEY in your .env file…") gave an end user nothing to try, because they have no `.env`. I replaced it with the message above. It tells the user what to do (wait and retry, or tell whoever runs the app) and keeps the key hint on a separate line for the person who does have the `.env`.
 
 ---
 
@@ -487,6 +497,7 @@ Couldn't reach the model, so there's no outfit yet. The model rejected your API 
 | 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 
 Criterion 6, try 1, `tools.py::search_listings` (new ranking), query `black sneakers under $60`:
 
@@ -496,7 +507,7 @@ selected_item: Platform Sneakers — White Chunky Sole ($48.0, poshmark)
 
 **Did it help, and how do I know:**
 
-**Yes: criterion 6 went from 0 of 5 to 5 of 5, and criteria 1–5 stayed at 5 of 5, so the one change fixed the failure and broke nothing I measured.**
+**Yes: criterion 6 went from 0 of 5 to 5 of 5, and criteria 1–5 and 7 stayed at 5 of 5, so the one change fixed the failure and broke nothing I measured.**
 
 Side by side (before is Run Log — Before above, after is the table in this section):
 
@@ -508,9 +519,10 @@ Side by side (before is Run Log — Before above, after is the table in this sec
 | 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | 5/5 MET | 5/5 MET |
 | 5. A query with filters but no item word says no item was given | 5 of 5 | 5/5 MET | 5/5 MET |
 | **6. The item word outranks a colour in the search** | 5 of 5 | **0/5 MISSED** | **5/5 MET** |
+| 7. The fit card always names the real price and platform | 4 of 5 | 5/5 MET | 5/5 MET |
 
 - **Criterion 6 was written after the failure was found.** That is the opposite of how the first five were written, so it shows that this one bug is fixed, not that search is good. It is one deterministic query, so its five tries are the same result five times.
-- **Nothing else moved.** Criteria 1–5 passed 5/5 before and after, and the top result for every other scenario query is unchanged (lst_002, lst_005, lst_007, and the two empty queries still return nothing).
+- **Nothing else moved.** Criteria 1–5 and 7 passed 5/5 before and after (criterion 7 is scored on the criterion 1 fit cards), and the top result for every other scenario query is unchanged (lst_002, lst_005, lst_007, and the two empty queries still return nothing).
 - **A wider check, separate from the run log.** I ran 40 colour + item queries (e.g. `black sneakers`, `white boots`, `brown cardigan`) through the old and new ranking. A query passes if the top result's title contains the item word.
 
 | | Top result contains the item word |
@@ -526,7 +538,7 @@ Side by side (before is Run Log — Before above, after is the table in this sec
 
 ## What's Still Broken
 
-No criterion is currently missed (all six are 5/5 after the fix). What's left is what the criteria can't see, and a few things I know are weak.
+No criterion is currently missed (all seven are met after the fix). What's left is what the criteria can't see, and a few things I know are weak.
 
 **Search ranking, which is where the one change landed**
 - **A rare style word can still beat the item word.** `y2k black dress` returns Platform Mary Janes first and the Silk Slip Dress second, because `y2k` is a rare tag and the rarity weighting that fixed `black sneakers` also rewards it. This is the trade-off I flagged and had not tested; now I have. I would add a bonus for matching the item word in the title, but that is a second change, and the milestone asks for one.

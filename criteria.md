@@ -136,6 +136,43 @@ either 5 of 5 or 0 of 5, so 5 of 5 is the only honest target.
 
 ---
 
+## 7. The fit card always names the real price and platform
+
+> **Restored in unit 4.** This was criterion 4 in unit 3. I removed it when I
+> renumbered, then restored it, because the unit says never to delete an
+> original. It is numbered 7 so the run-log rows for criteria 4–6 keep their
+> numbers. The original text is below, unchanged, with the revision under it.
+
+Given 5 fit cards generated for 5 different items, each card contains the
+item's price as a literal `$` dollar figure and its platform name, each
+exactly once as a substring — in at least 4 of 5 tries.
+
+**Why this target:** `create_fit_card` calls a model, so the wording will
+differ every time by design (see `config.TEMPERATURE`) — that's not what this
+criterion checks. It checks two specific facts the prompt is supposed to force
+into the output every time: the price and the platform, both pulled straight
+from `new_item`, not invented by the model. Whether those facts show up is a
+test of whether the prompt reliably constrains the model's formatting, and
+models don't follow formatting instructions with perfect consistency — so 4/5
+leaves room for an occasional drop without treating a single miss as proof the
+tool is broken, the same shape of reasoning as criterion 1. Every listing in
+`data/listings.json` has a non-null `price` and `platform` (checked all 40),
+so the model always has both facts available going in — a miss here is never
+a missing-data edge case, it's unambiguously the model dropping or
+reformatting a fact it was given.
+
+> **Revised in unit 4:** Given one item, `create_fit_card` is run 5 times with
+> caching off, and each fit card contains the item's price as a literal `$`
+> dollar figure and its platform name, each exactly once as a substring — in at
+> least 4 of 5 tries.
+>
+> **Why revised:** The original said both "5 fit cards for 5 different items"
+> and "4 of 5 tries", which are two different things to count, so it could not
+> be scored as written. The revision uses one item run 5 times, the same shape
+> as criteria 1–4. The target stays 4 of 5; it is not lowered.
+
+---
+
 <!-- ─────────────────────────────────────────────────────────────────────────
      UNIT 4 — read this before you change anything above.
 

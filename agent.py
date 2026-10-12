@@ -180,8 +180,11 @@ def _model_down(session: dict, tool: str, exc: ModelUnavailable) -> dict:
     """Stop the run with a message instead of a stack trace."""
     session["error"] = (
         f"Couldn't reach the model, so there's no "
-        f"{'outfit' if tool == 'suggest_outfit' else 'fit card'} yet. {exc} "
-        f"Fix that, then run the same query again."
+        f"{'outfit' if tool == 'suggest_outfit' else 'fit card'} yet. "
+        f"Your search worked and nothing you typed was wrong. Wait a minute and "
+        f"run the same query again. If it keeps failing, tell whoever runs this "
+        f"app that its connection to the model is down.\n"
+        f"  For whoever runs the app: {exc}"
     )
     trace.step(tool, note="model unavailable, stopping")
     return session
