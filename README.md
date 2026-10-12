@@ -213,8 +213,8 @@ some fresh white sneakers for the ultimate effortless look.
 | 1 | Registered `search_listings` on the MCP server and swapped the call in `run_agent()` for `call_tool`; checked the MCP and direct results were identical | `b601683` |
 | 2 | Added the `trace.step()` calls and a `ModelUnavailable` handler; I triggered the three failures and the outputs are under Failure Modes | `b601683` |
 | 3 | Wrote the scenarios, ran `run_eval.py --label before`, and scored the tries with a script | `2e1ea41` |
-| 4 | Drafted verdicts and diagnoses; rewrote them after I pasted the milestone text | `344a7f1`, `05372a7` |
-| 5 | Changed the search ranking; added criterion 6 and re-ran before and after so the logs differ | `05372a7`, `4a05b7c`, `2e4b627` |
+| 4 | Drafted verdicts and diagnoses; rewrote them after I pasted the milestone text | `344a7f1`, `c21cc26` |
+| 5 | Changed the search ranking; added criterion 6 and re-ran before and after so the logs differ | `c21cc26`, `d3738f9`, `fbcf112` |
 | 6 | Wrote What's Still Broken and this section | this commit |
 
 **Open Questions (empty-search message)**
