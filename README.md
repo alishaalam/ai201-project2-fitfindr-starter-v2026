@@ -211,7 +211,7 @@ some fresh white sneakers for the ultimate effortless look.
 | Milestone | What Claude did | Result |
 |---|---|---|
 | 1 | Registered `search_listings` on the MCP server and swapped the call in `run_agent()` for `call_tool`; checked the MCP and direct results were identical | `b601683` |
-| 2 | Added the `trace.step()` calls and a `ModelUnavailable` handler; I triggered the three failures and the outputs are under Failure Modes. I had Claude say what a user could try after each message; the model-unavailable one gave an end user nothing, so it was reworded | `b601683`, then the message rewording |
+| 2 | Added the `trace.step()` calls and a `ModelUnavailable` handler; I triggered the three failures and the outputs are under Failure Modes. I had Claude say what a user could try after each message; the model-unavailable one gave an end user nothing, so I replaced that message | `b601683`, then the new message |
 | 3 | Wrote the scenarios, ran `run_eval.py --label before`, and scored the tries with a script | `2e1ea41` |
 | 4 | Drafted verdicts and diagnoses; rewrote them after I pasted the milestone text | `344a7f1`, `c21cc26` |
 | 5 | Changed the search ranking; added criterion 6 and re-ran before and after so the logs differ | `c21cc26`, `d3738f9`, `fbcf112` |
@@ -232,6 +232,21 @@ some fresh white sneakers for the ultimate effortless look.
 
      Don't fill these in during unit 3.
      ═══════════════════════════════════════════════════════════════════ -->
+
+---
+
+## Unit 4 at a glance
+
+In one sentence: I moved `search_listings` onto MCP, added a trace and a handler for the model being unreachable, ran six scenarios five times each, found one miss (the item word losing to a colour in the search ranking), fixed it with one change to `search_listings`, and re-ran: that criterion went from 0 of 5 to 5 of 5 and the other six stayed met.
+
+| Milestone | What I did | Where to look |
+|---|---|---|
+| 1. Move one tool onto MCP | Registered `search_listings` in `mcp_server.py`; `run_agent()` calls it through `call_tool`; results identical to the direct call | "On the MCP move", under Loop Trace |
+| 2. Break it, then trace it | Triggered the empty search, the empty wardrobe and the model being unavailable; added a handler for the last one; added `trace.step()` calls | Failure Modes, Loop Trace |
+| 3. Run the test | Seven criteria on six scenarios, five tries each, cache off | Run Log — Before |
+| 4. Call each criterion and diagnose every miss | Six criteria met, one missed (criterion 6, 0 of 5); diagnosis names the tool and the mechanism | Verdicts and Diagnoses |
+| 5. Fix one thing and re-run | Rarity weighting in `search_listings`; criterion 6 went 0 of 5 → 5 of 5, nothing else moved | The Improvement |
+| 6. Say what's still broken | What I left open, and why | What's Still Broken, How I Used AI |
 
 ---
 
@@ -365,6 +380,16 @@ Found the absolute cutest butterfly baby tee on depop today for only $18 and I�
 
      Look for a pattern. Three misses on the same tool is one problem, not
      three. -->
+
+**Criteria changes this unit.** Every original criterion is still in `criteria.md`, and no target was lowered.
+
+| Criterion | What changed | Why |
+|---|---|---|
+| 3. The selected item never changes identity | Revised: the full dict the tools received, captured from the tool calls, instead of an id read from the trace. The original line is kept and the revision sits under it. | It measured the wrong thing: the trace is written from the same session variable that gets passed on, so a swapped item would have shown the same id. |
+| 4. The empty-wardrobe path | Renumbered from 5. Text unchanged. | The fit-card criterion that was 4 left the numbering for a while (see 7). |
+| 5. Filters but no item word | New: promoted from a diagnostic scenario that shipped in `scenarios.py`. | The "no item to search for" message had its own earlier bug and no criterion watching it. |
+| 6. The item word outranks a colour | New, added after the diagnosis. | None of criteria 1–5 could see a search-ranking failure. It is written after the failure was found, so it measures one known bug and not an independent target. |
+| 7. The fit card names the real price and platform | Original unit 3 criterion 4, restored verbatim, with a measurability revision under it. | The original mixed "5 different items" with "4 of 5 tries", so it could not be scored as written. The revision is one item run 5 times; the 4-of-5 target is unchanged. |
 
 | # | Criterion | Target | Verdict | How I decided |
 |---|---|---|---|---|
@@ -548,6 +573,7 @@ No criterion is currently missed (all seven are met after the fix). What's left 
 **Measurement**
 - **Criterion 3's revision has not been re-measured.** It now asks for the full dict the tools received, captured from the tool calls, but the eval still reads ids from the trace. I would wrap the two tools in the eval to record their arguments. I stopped because the revision was only written this unit.
 - **Criterion 1 still says 4 of 5 in `criteria.md`.** I named it as the one to tighten but did not edit it, since a tightening isn't one of the two kinds of change that count.
+- **Criterion 7 has no scenario of its own.** It is scored on the five fit cards from criterion 1's scenario, which is one item (lst_002, $18, depop), so it shows the prompt puts the price and platform in for that one item, not for all 40. An earlier run on five different items also had the price and platform on all 25 cards, but I scored that with the same script and it predates the restored wording. I would add one scenario per item (different prices and platforms) and re-run before and after. I stopped because that means swapping the old `search_listings` back in for a second "before" run, and criterion 1's scenario already exercises `create_fit_card` and passes.
 - **Pass and fail were scored by a script I wrote,** using the rules under Run Log — Before.
 
 **The agent**
