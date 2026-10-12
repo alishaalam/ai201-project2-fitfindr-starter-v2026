@@ -452,7 +452,7 @@ Couldn't reach the model, so there's no outfit yet. The model rejected your API 
 
 ### Run Log — After
 
-`python run_eval.py --label after_6criteria`, against the **new ranking**, same six scenarios, cache off, 40 model calls. Full output: [results/run_2026-10-11_1929_after_6criteria.md](results/run_2026-10-11_1929_after_6criteria.md).
+`python run_eval.py --label after_6criteria`, against the **new ranking**, same six scenarios, cache off, 40 model calls. Full output: [results/run_2026-10-11_1929_after_6criteria.md](results/run_2026-10-11_1929_after_6criteria.md). The first after-run, from 2026-10-07 on the same new ranking but before criterion 6 existed, is kept for reference: [results/run_2026-10-07_1844_after.md](results/run_2026-10-07_1844_after.md) (criteria 1–5, all 5/5).
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
