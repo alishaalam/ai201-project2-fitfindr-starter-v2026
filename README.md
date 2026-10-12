@@ -602,6 +602,18 @@ I would leave the MCP routing of the diagnostic searches and the trace printing 
 
 ## Stretch Features (extra credit)
 
+**Status: all three stretch features are done, measured and pushed.** Each has its own commit, a criterion written for it, and run logs before and after (5 tries per scenario, cache off). The plan below was written before I started and is kept as written; the results follow it in sections A, B and C.
+
+| Feature | Commit | Result |
+|---|---|---|
+| **A.** Second improvement: a title-match bonus in `search_listings` | `cd9c019` | Criterion 8 (`y2k black dress` selects a dress): 0/5 → 5/5. Criteria 1–7 unchanged. |
+| **B.** Retry with looser constraints: an empty sized search retries once without the size and says what it dropped | `9dc7af3` | Criterion 9 (`graphic tee size XXS`): 0/5 → 5/5. Criteria 1–8 unchanged. |
+| **C.** A second tool on MCP: `create_fit_card` | `c8c184d` | Criteria 1–9 all 5/5 before and after. Behaviour differed in three ways (cache setting, error shape, model-call counter), and the move needed two fixes in `mcp_client.py`. |
+
+The plan statement before the work is in commit `d0bb4e4`. The graded state is unchanged at tag `unit4-core`.
+
+**Caveats that apply to all three.** Criteria 8 and 9 were written after the failures were found, so each measures one known bug. My scoring script is mine. Stretch changes touched files the core unit left alone (`agent.py`, `mcp_client.py`, `app.py`), and A changed which item the agent picks for `vintage graphic tee`. What's Still Broken has the open items.
+
 **What I'm adding, written before I start.** Three optional stretch features. The unit's rule is that the MCP move and one improvement are the only changes, so these are extra, and I'm keeping them apart from the graded work:
 
 - **The graded unit is the state at git tag `unit4-core`** (commit `def512f`). The run logs, verdicts and diagnoses above describe that state and are not re-run or edited by the stretch work.
