@@ -212,7 +212,7 @@ some fresh white sneakers for the ultimate effortless look.
 
 ## Run Log — Before
 
-`python run_eval.py --label before` — every scenario five times, caching off, nothing changed between tries. Full output: [results/run_2026-10-07_1815_before.md](results/run_2026-10-07_1815_before.md). 80 model calls. The five fit cards for each item were all different, so these were five real model answers, not cache hits. That file also holds runs of five fit-card scenarios from a criterion I later removed; they aren't in the table below.
+`python run_eval.py --label before_6criteria`, against the **old ranking** (every matched word counts 1), every scenario five times, caching off, nothing changed between tries. Full output: [results/run_2026-10-11_1926_before_6criteria.md](results/run_2026-10-11_1926_before_6criteria.md). 40 model calls. Criteria 1–5 were first run on 2026-10-07 ([results/run_2026-10-07_1815_before.md](results/run_2026-10-07_1815_before.md), 80 model calls, which also holds runs of a fit-card criterion I later removed) and were run again here together with criterion 6, which I added after diagnosing the search-ranking failure (see `criteria.md`). Criteria 1–5 came out 5/5 both times. The pasted output for criteria 1–5 below is from the first run.
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
@@ -221,6 +221,7 @@ some fresh white sneakers for the ultimate effortless look.
 | 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL | MISSED (0/5) |
 
 How each was scored:
 - **1:** no crash, no `session["error"]`, non-empty `fit_card`. One fixed query, 5 runs.
@@ -228,6 +229,7 @@ How each was scored:
 - **3:** the `id` in the `select`, `suggest_outfit` and `create_fit_card` trace steps is the same. One fixed query, 5 runs.
 - **4:** no crash, no `session["error"]`, non-empty `outfit_suggestion`. One fixed query with `wardrobe["items"] == []`, 5 runs.
 - **5:** `session["error"]` starts with "I didn't get an item to search for", does not contain "Nothing matched", and the trace has no `suggest_outfit` or `create_fit_card` step. One fixed query, 5 runs.
+- **6:** the title of `session["selected_item"]` contains the item word `sneakers`. One fixed query (`black sneakers under $60`), 5 runs.
 
 **Real output from one try**, pasted as text, naming the file and function that produced it:
 
@@ -293,6 +295,24 @@ Trace:
       →    search_listings returned nothing, stopping before suggest_outfit
 ```
 
+**Criterion 6** — `tools.py::search_listings` (old ranking), run through `agent.py::run_agent`, query `black sneakers under $60`, try 1 (from [results/run_2026-10-11_1926_before_6criteria.md](results/run_2026-10-11_1926_before_6criteria.md)). The selected item was a shirt, on all five tries:
+
+```
+selected_item: Oversized Flannel Shirt — Plaid Red/Black ($22.0, thredUp)
+```
+
+Trace:
+
+```
+[1] search_listings (via MCP)
+      in:  description='black sneakers', size=None, max_price=60.0
+      out: 8 items: Oversized Flannel Shirt — Plaid Red/Black, Platform Mary Janes — Black Patent, Vintage Graphic Hoodie — Faded Black … +5 more
+[2] select
+      in:  id=lst_003
+      out: Oversized Flannel Shirt — Plaid Red/Black ($22.0, thredUp)
+      →    took search_results[0]
+```
+
 ---
 
 ## Verdicts and Diagnoses
@@ -320,18 +340,21 @@ Trace:
 | 3 | The selected item never changes identity mid-pipeline | 5 of 5 | MET (5/5) | The same `id=lst_005` appeared at `select`, `suggest_outfit` and `create_fit_card` in all five traces. |
 | 4 | The empty-wardrobe path never falls back to nothing | 5 of 5 | MET (5/5) | Every try returned a non-empty `outfit_suggestion` with no crash, and the five answers were all different. |
 | 5 | A query with filters but no item word says no item was given | 5 of 5 | MET (5/5) | Every message started "I didn't get an item to search for", none said "Nothing matched", and there was no tool-2 step. |
+| 6 | The item word outranks a colour in the search | 5 of 5 | MISSED (0/5) | All five tries selected the Oversized Flannel Shirt for `black sneakers under $60`; no title contained "sneakers". Read against the 5-of-5 target, 0 passes is a miss. |
 
 **Diagnoses**
 
-Nothing was missed, so there is no step or mechanism to name. I read each count against the original target: 5/5 against a 4-of-5 target for criterion 1, and 5/5 against 5-of-5 for the rest. I did not need a generous reading to get there.
+Criteria 1–5 were all met, so there is nothing to diagnose in them. I read each count against the original target: 5/5 against a 4-of-5 target for criterion 1, and 5/5 against 5-of-5 for the rest. Criterion 6 missed, and it was added after the first five were measured, so read it as a measurement of one known bug. See below.
 
-**Were the targets too low? Yes.** Every criterion passed on every try, and 0 of 80 model calls failed. A target that can't fail can't tell a solid agent from a lucky one.
+**The miss: criterion 6, 0 of 5. Place: a tool, `search_listings`. Mechanism: the ranking.** For `black sneakers under $60`, two sneaker listings are under $60 (lst_019, lst_035), but each matches one query word ("sneakers"), and so does every black item ("black"). The score was the number of matched words, so they all scored 1 and ties fell back to file order, which put the Oversized Flannel Shirt (lst_003) first. The loop then took `search_results[0]` and styled a shirt for someone who asked for sneakers. The loop and the model both did what they were told. The tool handed them the wrong first result, and no criterion had been checking the order of the results. Because search is deterministic, all five tries failed in the same way: one problem, not five.
+
+**Were the targets too low? Yes, for criteria 1–5.** Every one passed on every try, and 0 of 80 model calls failed. A target that can't fail can't tell a solid agent from a lucky one.
 
 **The criterion I'd tighten: criterion 1, from 4 of 5 to 5 of 5.** The 4-of-5 slack was written for a model failure that `agent.py` had no handler for. `ModelUnavailable` has been handled since Milestone 2, and no call failed, so the slack was never used. The risk in 5 of 5 is that one transient API error, which is not the agent's fault, would fail it. I have not changed `criteria.md` for this one.
 
 **One criterion was broken, not just easy: criterion 3.** It measured the wrong thing. The trace ids come from the same session variable that is passed on, so a swapped item could not have shown up. The revision sits under the original in `criteria.md`, with the original left in place. It has not been re-measured.
 
-**What these criteria don't cover:** search relevance. `black sneakers under $60` returns the Oversized Flannel Shirt first. Two sneaker listings are under $60 (lst_019, lst_035), but each matches one query word ("sneakers") and so does every black item ("black"). Every word counts the same and ties fall back to file order, so the flannel shirt wins. This is the tool's ranking (`search_listings`), not the loop or the model. No criterion would catch it, and it is the most likely real failure in the agent.
+**What criteria 1–5 didn't cover:** search relevance. That is the gap criterion 6 now measures. It is still one query, so it shows one failure and not that search is good in general.
 
 **Caveat:** pass and fail were scored by a script I wrote, using the rules written under the Run Log — Before table.
 
@@ -425,11 +448,11 @@ Couldn't reach the model, so there's no outfit yet. The model rejected your API 
 
 **What I changed:** `tools.py::search_listings` now ranks by matched keywords **weighted by how rare each word is across the 40 listings** (`_word_weights`: `log((N + 1) / (listings containing the word + 1)) + 1`), instead of counting every matched word as 1. The filters, the `[]`-when-nothing-matches contract and the result limit are unchanged.
 
-**Which failure it was meant to fix:** not one of my five criteria — none missed (see Verdicts and Diagnoses). It is the gap I flagged there: `black sneakers under $60` returned the *Oversized Flannel Shirt* first. The mechanism was in the tool, not the loop or the model: two sneaker listings are under $60 (lst_019, lst_035), but each matched one query word ("sneakers") and so did every black item ("black"). Every word counted 1 and ties fell back to file order, so the flannel shirt won. The agent then picked `search_results[0]` and styled a shirt for someone who asked for sneakers.
+**Which failure it was meant to fix:** criterion 6, which missed 0 of 5 (see Verdicts and Diagnoses). Place: the tool, `search_listings`. Mechanism: every matched word scored 1, so `black` tied with `sneakers` and file order put the Oversized Flannel Shirt first. That diagnosis is why the change is to the ranking and not to the loop or a prompt.
 
 ### Run Log — After
 
-`python run_eval.py --label after`, same five criteria, cache off. Full output: [results/run_2026-10-07_1844_after.md](results/run_2026-10-07_1844_after.md).
+`python run_eval.py --label after_6criteria`, against the **new ranking**, same six scenarios, cache off, 40 model calls. Full output: [results/run_2026-10-11_1929_after_6criteria.md](results/run_2026-10-11_1929_after_6criteria.md).
 
 | Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
 |---|---|---|---|---|---|---|---|
@@ -438,10 +461,17 @@ Couldn't reach the model, so there's no outfit yet. The model rejected your API 
 | 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
 | 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Criterion 6, try 1, `tools.py::search_listings` (new ranking), query `black sneakers under $60`:
+
+```
+selected_item: Platform Sneakers — White Chunky Sole ($48.0, poshmark)
+```
 
 **Did it help, and how do I know:**
 
-**Yes, for the failure I targeted (item word first in 39 of 40 relevance queries, up from 21), and it broke nothing in the five criteria, which were 5/5 before and after.**
+**Yes: criterion 6 went from 0 of 5 to 5 of 5, and criteria 1–5 stayed at 5 of 5, so the one change fixed the failure and broke nothing I measured.**
 
 Side by side (before is Run Log — Before above, after is the table in this section):
 
@@ -452,10 +482,11 @@ Side by side (before is Run Log — Before above, after is the table in this sec
 | 3. The selected item never changes identity mid-pipeline | 5 of 5 | 5/5 MET | 5/5 MET |
 | 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | 5/5 MET | 5/5 MET |
 | 5. A query with filters but no item word says no item was given | 5 of 5 | 5/5 MET | 5/5 MET |
-| Not a criterion: item word ranked first, 40 colour + item queries | — | 21 of 40 | 39 of 40 |
+| **6. The item word outranks a colour in the search** | 5 of 5 | **0/5 MISSED** | **5/5 MET** |
 
-- **The five criteria can't show it.** They passed 5/5 before and after, so this table only shows nothing regressed. The top result for every scenario query is also unchanged (lst_002, lst_005, lst_007, and the two empty queries still return nothing).
-- **The evidence is a separate relevance check.** I ran 40 colour + item queries (e.g. `black sneakers`, `white boots`, `brown cardigan`) through the old and new ranking. A query passes if the top result's title contains the item word.
+- **Criterion 6 was written after the failure was found.** That is the opposite of how the first five were written, so it shows that this one bug is fixed, not that search is good. It is one deterministic query, so its five tries are the same result five times.
+- **Nothing else moved.** Criteria 1–5 passed 5/5 before and after, and the top result for every other scenario query is unchanged (lst_002, lst_005, lst_007, and the two empty queries still return nothing).
+- **A wider check, separate from the run log.** I ran 40 colour + item queries (e.g. `black sneakers`, `white boots`, `brown cardigan`) through the old and new ranking. A query passes if the top result's title contains the item word.
 
 | | Top result contains the item word |
 |---|---|
@@ -470,12 +501,12 @@ Side by side (before is Run Log — Before above, after is the table in this sec
 
 ## What's Still Broken
 
-No criterion is currently missed (all five are 5/5, before and after). What's left is what the criteria can't see, and a few things I know are weak.
+No criterion is currently missed (all six are 5/5 after the fix). What's left is what the criteria can't see, and a few things I know are weak.
 
 **Search ranking, which is where the one change landed**
 - **A rare style word can still beat the item word.** `y2k black dress` returns Platform Mary Janes first and the Silk Slip Dress second, because `y2k` is a rare tag and the rarity weighting that fixed `black sneakers` also rewards it. This is the trade-off I flagged and had not tested; now I have. I would add a bonus for matching the item word in the title, but that is a second change, and the milestone asks for one.
 - **Words that aren't in the searched text find nothing.** `shoes` and `trainers` return `[]` even though the catalog has shoes, because the search reads only title, description and style tags, not `category`. The brand isn't searched either: `wrangler jacket` doesn't put the Wrangler denim jacket first, because "Wrangler" is in the `brand` field and not in the text. I would index `category` and `brand` and add a small synonym list, and I stopped because it is a separate change from the weighting.
-- **My evidence for the fix is a proxy.** The 21 → 39 of 40 result uses queries and a "noun in the title" rule I wrote, and covers only colour + item queries.
+- **My evidence for the fix is narrow.** Criterion 6 is one query, and I wrote it after finding the bug. The 21 → 39 of 40 check uses queries and a "noun in the title" rule I also wrote, and covers only colour + item queries.
 
 **Measurement**
 - **Criterion 3's revision has not been re-measured.** It now asks for the full dict the tools received, captured from the tool calls, but the eval still reads ids from the trace. I would wrap the two tools in the eval to record their arguments. I stopped because the revision was only written this unit.

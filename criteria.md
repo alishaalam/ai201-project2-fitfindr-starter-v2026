@@ -115,6 +115,27 @@ words, which was false since no keyword had been searched.
 
 ---
 
+## 6. The item word outranks a colour in the search
+
+> **Added in unit 4, after the Milestone 4 diagnosis.** The first five criteria
+> all passed and none of them could see a search-ranking failure, so I added this
+> one to measure it. It is written after the failure was found, which is the
+> opposite of how the first five were written, so read it as a measurement of
+> one known bug and not as an independent target.
+
+Given a query with a colour and an item word where the catalog has that item
+(`black sneakers under $60`), the title of `session["selected_item"]` contains
+the item word — 5 of 5 tries.
+
+**Why this target:** `search_listings` is deterministic and has no model in it,
+so the same query returns the same ranking every time and the 5 tries can't
+split. Before the fix every matched word counted 1, so `black` (in many
+listings) tied with `sneakers` (in 2) and the tie fell back to file order,
+putting an Oversized Flannel Shirt first. A check on one deterministic query is
+either 5 of 5 or 0 of 5, so 5 of 5 is the only honest target.
+
+---
+
 <!-- ─────────────────────────────────────────────────────────────────────────
      UNIT 4 — read this before you change anything above.
 

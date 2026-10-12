@@ -44,6 +44,14 @@ SCENARIOS = [
         "criterion": 4,
     },
     {
+        # A colour plus an item word. Criterion 6 checks that the item word
+        # outranks the colour, so the selected item is a sneaker.
+        "name": "item word outranks colour",
+        "query": "black sneakers under $60",
+        "wardrobe": "example",
+        "criterion": 6,
+    },
+    {
         # Filters but no item word. Hits the "no item to search for" message,
         # not the "nothing matched" one. Criterion 5.
         "name": "filters only, no item word",
