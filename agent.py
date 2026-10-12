@@ -17,8 +17,8 @@ import re
 
 import config
 import trace
-from mcp_client import call_tool
-from tools import search_listings, suggest_outfit, create_fit_card
+from mcp_client import MCPError, call_tool
+from tools import search_listings, suggest_outfit
 from generate import ModelUnavailable
 
 
@@ -182,12 +182,18 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
         if session["fit_card"] is None:
             try:
-                session["fit_card"] = create_fit_card(
-                    session["outfit_suggestion"], session["selected_item"]
-                )
-            except ModelUnavailable as exc:
-                return _model_down(session, "create_fit_card", exc)
-            trace.step("create_fit_card",
+                session["fit_card"] = call_tool("create_fit_card", {
+                    "outfit": session["outfit_suggestion"],
+                    "new_item": session["selected_item"],
+                })
+            except MCPError as exc:
+                # The server marks a model failure with "model_unavailable:" so it
+                # can be told apart from the server itself failing.
+                if "model_unavailable:" not in str(exc):
+                    raise
+                reason = str(exc).split("model_unavailable:", 1)[1].strip()
+                return _model_down(session, "create_fit_card", ModelUnavailable(reason))
+            trace.step("create_fit_card (via MCP)",
                        inputs=f"id={session['selected_item']['id']}, "
                               f"item={session['selected_item']['title']!r}, "
                               f"outfit={session['outfit_suggestion'][:40]!r}…",

@@ -216,6 +216,7 @@ some fresh white sneakers for the ultimate effortless look.
 | 4 | Drafted verdicts and diagnoses; rewrote them after I pasted the milestone text | `344a7f1`, `c21cc26` |
 | 5 | Changed the search ranking; added criterion 6 and re-ran before and after so the logs differ | `c21cc26`, `d3738f9`, `fbcf112` |
 | 6 | Wrote What's Still Broken and this section | this commit |
+| Stretch | Prototyped the title bonus and chose its size from three checks; added the size retry; moved `create_fit_card` onto MCP. Found by reading the SDK that the cache setting would not reach the server, and by testing the error path that server errors arrive wrapped in an exception group | see Stretch Features |
 
 **Open Questions (empty-search message)**
 
@@ -247,6 +248,8 @@ In one sentence: I moved `search_listings` onto MCP, added a trace and a handler
 | 4. Call each criterion and diagnose every miss | Six criteria met, one missed (criterion 6, 0 of 5); diagnosis names the tool and the mechanism | Verdicts and Diagnoses |
 | 5. Fix one thing and re-run | Rarity weighting in `search_listings`; criterion 6 went 0 of 5 → 5 of 5, nothing else moved | The Improvement |
 | 6. Say what's still broken | What I left open, and why | What's Still Broken, How I Used AI |
+
+Extra credit, after the graded work and separated from it by the git tag `unit4-core`: a title-match bonus in the search (A), a size retry that says what it dropped (B), and `create_fit_card` on MCP (C). See Stretch Features.
 
 ---
 
@@ -458,7 +461,7 @@ Criteria 1–5 and 7 were all met, so there is nothing to diagnose in them. (Cri
       →    search_listings returned nothing, stopping before suggest_outfit
 ```
 
-**On the MCP move:** I registered `search_listings` in `mcp_server.py` with a description written for a caller who can't see my code (units, result fields, empty-list case) and swapped the first-pass call in `run_agent()` for `call_tool("search_listings", {...})`. Nothing behaved differently: for `"graphic tee"` under $30, the MCP result was identical to the direct call (same 6 listings, same order), and so were three empty cases (`"!!!"`, `jacket` size `XXS`, `jeans` size `W30` under $50). The two diagnostic searches inside `_empty_message()` still call `tools.search_listings` directly; they are part of the empty-search step, not separate loop steps, and routing them through MCP would only add server launches to the failure path.
+**On the MCP move:** I registered `search_listings` in `mcp_server.py` with a description written for a caller who can't see my code (units, result fields, empty-list case) and swapped the first-pass call in `run_agent()` for `call_tool("search_listings", {...})`. Nothing behaved differently: for `"graphic tee"` under $30, the MCP result was identical to the direct call (same 6 listings, same order), and so were three empty cases (`"!!!"`, `jacket` size `XXS`, `jeans` size `W30` under $50). The two diagnostic searches inside `_empty_message()` still call `tools.search_listings` directly; they are part of the empty-search step, not separate loop steps, and routing them through MCP would only add server launches to the failure path. *Stretch C moved a second tool, `create_fit_card`, which calls the model, and that behaved differently in three ways (cache setting, error shape, model-call counter); see Stretch Features.*
 
 ---
 
@@ -581,6 +584,9 @@ No criterion is currently missed (all seven are met after the fix). What's left 
 - **`call_tool` starts and stops the server on every call,** which adds latency. I haven't measured it.
 - **`trace.step()` prints as it records,** so a run without `--trace` still shows the step lines. I left `trace.py` alone.
 - **With an empty wardrobe, the agent gives generic advice and doesn't say so.** It passes criterion 4, but the user isn't told that nothing was drawn from their wardrobe.
+
+- **With `create_fit_card` on MCP, the model-call counter and pacing no longer cover it.** `generate.py`'s call count, token count, rate limiter and session budget live in whichever process makes the call, and the server is a new process for every call. The eval's "N model calls" line undercounts (60 became 31), the 15-per-minute pacing and the 300-call budget don't see the server's calls, and a runaway loop through the server would not trip the guard. I would move the counters into a file or have the server report its usage back, and stopped because it is outside the stretch feature's scope.
+- **Each MCP call launches the server,** so a run now launches it two to three times. I haven't measured the cost.
 
 **My call on what's left**
 
@@ -754,6 +760,90 @@ Criterion 2 still stops. Try 1 (`designer ballgown size XXS under $5`) now shows
 - **It only drops the size.** A price that blocks the search is not retried, because loosening someone's budget is a bigger call than loosening a size. That case still gets the old advice message.
 - **One more MCP call on every failed sized search** (an extra server launch), which only shows up when the search was going to fail anyway.
 - **The size parse is a regex** (`size <token>`), so a size written another way is not parsed and never retried.
+
+### C. A second tool on MCP: `create_fit_card` (done)
+
+**What changed.**
+- `mcp_server.py`: `create_fit_card(outfit: str, new_item: dict) -> str` is registered next to `search_listings`, with a description written for a caller who can't see my code (which fields of the listing it needs, that the price is written like `$18`, the empty-outfit fallback, that the wording differs every time, and what the error looks like). The real function is imported under an alias, as before.
+- `agent.py::run_agent`: the call is now `call_tool("create_fit_card", {...})`, and the trace step reads `create_fit_card (via MCP)`.
+- `mcp_client.py`, two fixes that moving a **model-calling** tool made necessary (listed below).
+
+**Why this tool.** `search_listings` has no model in it, so moving it showed the seam without anything slow or random. `create_fit_card` calls the model, so it shows what the seam costs when the tool is not a pure function.
+
+**What behaved differently after the move (the "first clue" the milestone asks about).** The fit card still comes back as a string and still names the price and platform once each, but three things changed under it:
+1. **The cache setting did not reach the server.** The MCP client starts the server with a small default environment (HOME, PATH, USER and a few more), so `run_eval.py` turning the cache off in its own process would not have turned it off in the server, and the five tries would have come back as cached answers. I read this in the SDK before running anything, and `mcp_client.py::_server_env` now passes `AI201_CACHE=0` when the cache is off. I checked it: with the cache on, two identical calls return the same card; with it off, they differ. In the eval, the five fit cards for each scenario were all different.
+2. **An error from the server arrived as the wrong error.** When the model is unreachable, the server's error comes back wrapped in an exception group, and `call_tool` replaced it with "unhandled errors in a TaskGroup", which would have crashed the run instead of showing the model-unavailable message. I only found this by testing the failure end to end with a wrong key. `call_tool` now unwraps the group, the server marks a model failure with `model_unavailable:`, and `run_agent` turns that back into the same message as before. Other MCP errors (a missing argument, say) still surface as themselves.
+3. **The model-call counter and the pacing now live in the server.** See What's Still Broken.
+
+**Run logs, same format.**
+
+Before, with the retry from B and `create_fit_card` called directly: [results/run_2026-10-12_0910_stretch_retry.md](results/run_2026-10-12_0910_stretch_retry.md)
+
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+After `create_fit_card` on MCP: [results/run_2026-10-12_0915_stretch_mcp2.md](results/run_2026-10-12_0915_stretch_mcp2.md)
+
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Side by side:
+
+| Criterion | Target | Before | After |
+|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | 5/5 MET | 5/5 MET |
+| 2. An impossible query stops before the second tool | 5 of 5 | 5/5 MET | 5/5 MET |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | 5/5 MET | 5/5 MET |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | 5/5 MET | 5/5 MET |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | 5/5 MET | 5/5 MET |
+| 6. The item word outranks a colour in the search | 5 of 5 | 5/5 MET | 5/5 MET |
+| 7. The fit card always names the real price and platform | 4 of 5 | 5/5 MET | 5/5 MET |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | 5/5 MET | 5/5 MET |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | 5/5 MET | 5/5 MET |
+
+Criterion 1, try 1. The fit card step is labelled as an MCP call:
+
+```
+[1] search_listings (via MCP)
+      in:  description='vintage graphic tee', size=None, max_price=30.0
+      out: 10 items: Graphic Tee — 2003 Tour Bootleg Style, Vintage Band Tee — Faded Grey, Y2K Baby Tee — Butterfly Print … +7 more
+[2] select
+      in:  id=lst_006
+      out: Graphic Tee — 2003 Tour Bootleg Style ($24.0, depop)
+      →    took search_results[0]
+[3] suggest_outfit
+      in:  id=lst_006, item='Graphic Tee — 2003 Tour Bootleg Style', wardrobe=10 items
+      out: Pair the graphic tee with your baggy straight-leg jeans, layered under the vintage black denim jacket for an e…
+[4] create_fit_card (via MCP)
+      in:  id=lst_006, item='Graphic Tee — 2003 Tour Bootleg Style', outfit='Pair the graphic tee with your baggy str'…
+      out: I still can’t believe I scored this 2003 tour graphic tee on depop for only $24! It has the ultimate bootleg g…
+```
+
+**Did it work:** yes: nothing in criteria 1–9 moved (all nine are 5 of 5 before and after), and `python mcp_client.py` now lists both tools. Because the aim of this feature is the seam and not a better score, the "after" log can only show that nothing broke; the behaviour differences above are the real result.
+
+**Trade-offs and limits.**
+- **The "N model calls this session" line undercounts.** `run_eval.py` printed 60 model calls with `create_fit_card` in-process and 31 with it on MCP, because its calls now happen in the server's process, which exits after each call.
+- **Each fit card starts and stops a server,** so a run now launches it two or three times (search, the size retry when it happens, fit card), which adds latency I have not measured.
+- **To trigger the model-unavailable failure for `create_fit_card` you now have to change the key in `.env`,** as the milestone says. Setting `GEMINI_API_KEY` for one command, which I used earlier, no longer reaches the server.
+- **I changed `mcp_client.py`, which the starter gave me.** Both fixes are small, but they are edits to the provided plumbing.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 

@@ -59,6 +59,8 @@ works with a direct call, and **a documented failure earns the point in full.**
 
 from mcp.server.fastmcp import FastMCP
 
+from generate import ModelUnavailable
+from tools import create_fit_card as _create_fit_card_impl
 from tools import search_listings as _search_listings_impl
 
 # log_level="WARNING" keeps the server from printing an INFO line for every
@@ -84,6 +86,26 @@ def search_listings(
     when nothing matches, including when `description` has no usable words.
     """
     return _search_listings_impl(description, size, max_price)
+
+
+@mcp.tool()
+def create_fit_card(outfit: str, new_item: dict) -> str:
+    """
+    Write a short social-media caption (2 to 4 sentences, in the voice of
+    someone excited about a secondhand find) for one listing. `outfit` is the
+    styling suggestion to weave in, as plain text. `new_item` is a listing
+    object; it must have `title`, `price` (a number, US dollars) and `platform`,
+    and may have `brand`, `colors` and `style_tags`. The caption mentions the
+    item, its price (written like $18) and its platform once each. If `outfit`
+    is empty or whitespace the tool does not call the model and returns a short
+    fallback line instead. Calls a language model, so the wording differs every
+    time. If the model cannot be reached the call fails with an error whose text
+    starts with "model_unavailable:".
+    """
+    try:
+        return _create_fit_card_impl(outfit, new_item)
+    except ModelUnavailable as exc:
+        raise ValueError(f"model_unavailable: {exc}") from exc
 
 
 # Two notes on the block above.

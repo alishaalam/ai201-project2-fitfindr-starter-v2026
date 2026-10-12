@@ -60,12 +60,30 @@ def call_tool(name: str, arguments: dict):
     except MCPError:
         raise
     except Exception as exc:  # noqa: BLE001 — re-raised readably below
+        # An error the server returned arrives wrapped in an exception group by
+        # the client's task group. Hand back the readable one inside it, so the
+        # caller sees the tool's own message and not "unhandled errors in a
+        # TaskGroup".
+        inner = _find_mcp_error(exc)
+        if inner is not None:
+            raise inner from None
         raise MCPError(
             f"Couldn't call '{name}' over MCP: {exc}\n"
             f"Check that mcp_server.py runs on its own first:\n"
             f"    python mcp_server.py\n"
             f"If it exits immediately with an error, fix that before coming back here."
         ) from exc
+
+
+def _find_mcp_error(exc):
+    """The first MCPError inside an exception, looking through exception groups."""
+    if isinstance(exc, MCPError):
+        return exc
+    for sub in getattr(exc, "exceptions", ()) or ():
+        found = _find_mcp_error(sub)
+        if found is not None:
+            return found
+    return None
 
 
 async def _call(name: str, arguments: dict):
@@ -75,6 +93,7 @@ async def _call(name: str, arguments: dict):
     params = StdioServerParameters(
         command=sys.executable,
         args=[str(SERVER)],
+        env=_server_env(),
     )
 
     async with stdio_client(params) as (read, write):
@@ -95,6 +114,21 @@ async def _call(name: str, arguments: dict):
                 raise MCPError(f"The tool '{name}' returned an error: {_text(result)}")
 
             return _unwrap(result)
+
+
+def _server_env():
+    """
+    Extra environment for the server process.
+
+    The MCP client starts the server with a small default environment (HOME,
+    PATH, USER and a few more), so a setting made in this process does not reach
+    it. The one that matters is the cache: run_eval.py turns it off in-process so
+    five tries are five real answers, and a tool that calls the model and lives
+    in the server would otherwise quietly answer from the cache.
+    """
+    import config
+
+    return None if config.CACHE_ENABLED else {"AI201_CACHE": "0"}
 
 
 def _unwrap(result):
