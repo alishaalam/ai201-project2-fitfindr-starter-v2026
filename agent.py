@@ -47,6 +47,7 @@ def new_session(query: str, wardrobe: dict) -> dict:
         "outfit_suggestion": None,   # what suggest_outfit returned
         "fit_card": None,            # what create_fit_card returned
         "error": None,               # set when the run ended early
+        "notes": [],                 # things the agent did that the user should know
     }
 
 
@@ -129,6 +130,26 @@ def run_agent(query: str, wardrobe: dict) -> dict:
             trace.step("search_listings (via MCP)",
                        inputs=", ".join(f"{k}={v!r}" for k, v in args.items()),
                        returned=session["search_results"])
+
+            # ONE retry: if a size was asked for and nothing matched, look again
+            # without it and say so. Only when there are item words to search for
+            # (no words means no size could have been the blocker), and only once.
+            if (not session["search_results"] and parsed["size"]
+                    and re.search(r"\w", parsed["description"] or "")):
+                retry = {**args, "size": None}
+                session["search_results"] = call_tool("search_listings", retry)
+                found = session["search_results"]
+                trace.step("search_listings (via MCP), retry without size",
+                           inputs=", ".join(f"{k}={v!r}" for k, v in retry.items()),
+                           returned=found,
+                           note=(f"dropped size {parsed['size']}" if found
+                                 else f"still empty without size {parsed['size']}, stopping"))
+                if found:
+                    session["notes"].append(
+                        f"Nothing matched in size {parsed['size']}, so I dropped the size "
+                        f"filter. The top result is size {found[0]['size']}: check the fit "
+                        f"before you buy."
+                    )
             continue
 
         # THE BRANCH: nothing came back, so stop before suggest_outfit.

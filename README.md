@@ -93,13 +93,13 @@ FitFindr is a secondhand-clothes shopping agent. A user types a plain-language r
      The grader checks your code against what you claim here, so the file and
      function have to be real. -->
 
-**Branch rule:** If `search_listings` returns an empty list, put a message in `session["error"]` describing what the user could change (loosen the price, size, or description) and return the session immediately — do not call `suggest_outfit`. Otherwise, take `search_results[0]` as `selected_item` and continue to `suggest_outfit`, then `create_fit_card`.
+**Branch rule:** If `search_listings` returns an empty list, put a message in `session["error"]` describing what the user could change (loosen the price, size, or description) and return the session immediately — do not call `suggest_outfit`. Otherwise, take `search_results[0]` as `selected_item` and continue to `suggest_outfit`, then `create_fit_card`. *Stretch B (see Stretch Features):* if that empty result came with a size and the query has item words, the agent first retries once without the size, records a note saying what it dropped, and continues if that finds something; only if the retry is also empty does it take the stop path above.
 
 **Where it lives:** `agent.py::run_agent`
 
 **How the query is parsed:** Regex, in `agent.py::_parse_query`. `max_price` comes from `under|below|less than|max $N`; `size` comes from `size <token>`; those matches are removed, filler words ("looking for", "a", "an", "I want", "find me") are stripped, and the remaining text is `description`.
 
-**What moves through the session:** `query` → `parsed` → `search_results` → `selected_item` → (`wardrobe`, set at session creation) → `outfit_suggestion` → `fit_card`, with `error` short-circuiting everything after it the moment it's set.
+**What moves through the session:** `query` → `parsed` → `search_results` → `selected_item` → (`wardrobe`, set at session creation) → `outfit_suggestion` → `fit_card`, with `error` short-circuiting everything after it the moment it's set. *Stretch B adds `notes`: messages about what the agent changed, e.g. a dropped size, which `app.py` prints.*
 
 ---
 
@@ -666,6 +666,94 @@ Criterion 8, try 1. Before: `Platform Mary Janes — Black Patent ($55.0, depop)
 **A side effect I'm reporting, not hiding.** The top result for `vintage graphic tee under $30`, which is criterion 1's query, changed from Y2K Baby Tee ($18, depop) to Graphic Tee — 2003 Tour Bootleg Style ($24, depop). Its title now contains both "graphic" and "tee", which I think is a better answer, but it is a change in what the agent returns. Criterion 7 is scored against whichever item was selected, so it still passes.
 
 **Trade-offs and limits.** The bonus favours listings whose *title* matches, so a good listing whose title omits the item word (a "90s Leather Bomber" for `jacket`) ranks lower; `90s black jacket` still returns the bomber first, which I think is fine. My checks are queries I wrote, and criterion 8 is one deterministic query that I wrote after finding the failure.
+
+### B. Retry with looser constraints (done)
+
+**What it does (`agent.py::run_agent`, one change).** When the first search comes back empty and the user asked for a size, the agent searches **once more without the size**, through MCP, and says what it dropped. If that finds listings, the run continues as normal and the session carries a note that `app.py` prints (`Note: Nothing matched in size XXS, so I dropped the size filter. The top result is size L: check the fit before you buy.`). If it is still empty, the old empty-search path runs unchanged, so the size was not the only blocker. No retry happens when there are no item words (criterion 5) or when no size was asked for.
+
+**Why.** A size that blocks the search used to end the run with advice, even though matches existed in other sizes (`graphic tee size XXS`: 0 results with the size, 6 without). The retry does the search the advice told the user to do by hand.
+
+**Run logs, same format.** Criterion 9 is the new stretch criterion in `criteria.md`.
+
+Before, with the title bonus from A and no retry: [results/run_2026-10-12_0905_stretch_title_bonus.md](results/run_2026-10-12_0905_stretch_title_bonus.md)
+
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | FAIL | FAIL | FAIL | FAIL | FAIL | MISSED (0/5) |
+
+After the retry: [results/run_2026-10-12_0910_stretch_retry.md](results/run_2026-10-12_0910_stretch_retry.md)
+
+| Criterion | Target | Try 1 | Try 2 | Try 3 | Try 4 | Try 5 | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 2. An impossible query stops before the second tool | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 6. The item word outranks a colour in the search | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 7. The fit card always names the real price and platform | 4 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+| 9. A size that blocks the search is dropped once, and the agent says so | 5 of 5 | PASS | PASS | PASS | PASS | PASS | MET (5/5) |
+
+Side by side:
+
+| Criterion | Target | Before | After |
+|---|---|---|---|
+| 1. A matching query completes all three tools | 4 of 5 | 5/5 MET | 5/5 MET |
+| 2. An impossible query stops before the second tool | 5 of 5 | 5/5 MET | 5/5 MET |
+| 3. The selected item never changes identity mid-pipeline | 5 of 5 | 5/5 MET | 5/5 MET |
+| 4. The empty-wardrobe path never falls back to nothing | 5 of 5 | 5/5 MET | 5/5 MET |
+| 5. A query with filters but no item word says no item was given | 5 of 5 | 5/5 MET | 5/5 MET |
+| 6. The item word outranks a colour in the search | 5 of 5 | 5/5 MET | 5/5 MET |
+| 7. The fit card always names the real price and platform | 4 of 5 | 5/5 MET | 5/5 MET |
+| 8. A rare style word doesn't outrank the item word | 5 of 5 | 5/5 MET | 5/5 MET |
+| **9. A size that blocks the search is dropped once, and the agent says so** | 5 of 5 | **0/5 MISSED** | **5/5 MET** |
+
+Criterion 9, try 1 (`graphic tee size XXS`). The trace names the dropped size:
+
+```
+[1] search_listings (via MCP)
+      in:  description='graphic tee', size='XXS', max_price=None
+      out: [] (empty)
+[2] search_listings (via MCP), retry without size
+      in:  description='graphic tee', size=None, max_price=None
+      out: 6 items: Graphic Tee — 2003 Tour Bootleg Style, Y2K Baby Tee — Butterfly Print, Vintage Band Tee — Faded Grey … +3 more
+      →    dropped size XXS
+[3] select
+      in:  id=lst_006
+      out: Graphic Tee — 2003 Tour Bootleg Style ($24.0, depop)
+      →    took search_results[0]
+```
+
+Criterion 2 still stops. Try 1 (`designer ballgown size XXS under $5`) now shows the retry, and it still ends before `suggest_outfit`:
+
+```
+[1] search_listings (via MCP)
+      in:  description='designer ballgown', size='XXS', max_price=5.0
+      out: [] (empty)
+[2] search_listings (via MCP), retry without size
+      in:  description='designer ballgown', size=None, max_price=5.0
+      out: [] (empty)
+      →    still empty without size XXS, stopping
+[3] branch
+      →    search_listings returned nothing, stopping before suggest_outfit
+```
+
+**Did it help:** yes: criterion 9 went from 0 of 5 to 5 of 5, and criteria 1–8 stayed at 5 of 5 (criteria 2 and 5, the two that touch the empty-search path, still pass).
+
+**Trade-offs and limits.**
+- **The user may get an item in a size they didn't ask for.** For `graphic tee size XXS` the top result is size L. The note says so, but a user who needs XXS has still been shown something they can't wear, and the retry hides the "6 match in other sizes" list that the old message gave. A better version would offer the other sizes and let the user choose, which is a bigger change.
+- **It only drops the size.** A price that blocks the search is not retried, because loosening someone's budget is a bigger call than loosening a size. That case still gets the old advice message.
+- **One more MCP call on every failed sized search** (an extra server launch), which only shows up when the search was going to fail anyway.
+- **The size parse is a regex** (`size <token>`), so a size written another way is not parsed and never retried.
 
 <!-- ═════════════════════════════════════════════════════════════════════
 
