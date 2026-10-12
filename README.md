@@ -592,6 +592,23 @@ No criterion is missed, so nothing here blocks the five-tries-each result. I am 
 
 I would leave the MCP routing of the diagnostic searches and the trace printing alone, because they cost little and none of them changes what a user sees.
 
+---
+
+## Stretch Features (extra credit)
+
+**What I'm adding, written before I start.** Three optional stretch features. The unit's rule is that the MCP move and one improvement are the only changes, so these are extra, and I'm keeping them apart from the graded work:
+
+- **The graded unit is the state at git tag `unit4-core`** (commit `def512f`). The run logs, verdicts and diagnoses above describe that state and are not re-run or edited by the stretch work.
+- **Stretch commits come after that tag,** each as its own commit, and each is measured the same way as the core improvement: a criterion written first, a baseline run, the change, a run after, both logs side by side.
+
+| # | Stretch feature | Why this one | How I'll measure it |
+|---|---|---|---|
+| A | **A second improvement from my diagnosis:** an item-word-in-the-title bonus in `search_listings` | It fixes the failure my own ranking change introduced (`y2k black dress` returns Mary Janes first), which What's Still Broken already names | New criterion 8: `y2k black dress` selects a title containing `dress`, 5 of 5. Expected 0/5 before. |
+| B | **Retry with looser constraints:** an empty search retries once without the size filter and says what it dropped | A size that blocks the search currently ends the run with advice, though matches exist in other sizes | New criterion 9: `graphic tee size XXS` completes and the trace names the dropped size, 5 of 5. Expected 0/5 before. |
+| C | **A second tool on MCP:** `create_fit_card` | Shows the seam on a tool that calls the model, which `search_listings` does not | Criteria 1–9 stay met; criterion 7 (price and platform on the card) re-scored; two runs of one query still give different cards, so the cache setting reaches the server |
+
+Order: A, then B, then C, with a full run (`run_eval.py`, 5 tries per scenario, cache off) before and after each. I expect C to need one extra change I'll report: the MCP client starts the server with a restricted environment, so the eval's cache-off setting would not reach it.
+
 <!-- ═════════════════════════════════════════════════════════════════════
 
      SUBMISSION CHECKLIST — unit 3
